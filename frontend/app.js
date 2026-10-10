@@ -134,10 +134,11 @@ function renderPrediction(data) {
     '<p class="muted">Loan amount / annual income: ' + numberFmt(data.debt_to_income_ratio, 2) + '×</p>' +
     '<div class="warning">' + escapeHtml(data.disclaimer) + "</div></article>";
 }
-function renderFactor(item) {
+function renderFactor(item, maxAbsContribution) {
   const value = Number(item.shap_value) || 0;
   const positive = value >= 0;
-  const width = Math.max(1, Math.min(100, Math.abs(value) * 100));
+  const scale = Math.max(0.000001, Number(maxAbsContribution) || 0);
+  const width = Math.max(1, Math.min(100, Math.abs(value) / scale * 100));
   return '<li class="factor"><div class="factor-title"><span>' + escapeHtml(item.display_name || niceFeature(item.feature)) +
     '</span><strong class="' + (positive ? "positive" : "negative") + '">' + signed(value, 4) + '</strong></div>' +
     '<p class="muted">Applicant value: ' + escapeHtml(item.applicant_value) + ' · ' + escapeHtml(item.direction) + "</p>" +
@@ -146,8 +147,9 @@ function renderFactor(item) {
 }
 function renderExplanation(data) {
   const factors = Array.isArray(data.feature_contributions) ? data.feature_contributions : [];
-  const first = factors.slice(0, 5).map(renderFactor).join("");
-  const rest = factors.slice(5).map(renderFactor).join("");
+  const maxAbsContribution = Math.max(0.000001, ...factors.map(function (item) { return Math.abs(Number(item.shap_value) || 0); }));
+  const first = factors.slice(0, 5).map(function (item) { return renderFactor(item, maxAbsContribution); }).join("");
+  const rest = factors.slice(5).map(function (item) { return renderFactor(item, maxAbsContribution); }).join("");
   return '<article class="result-card"><p><span class="status ' + (data.is_approved ? "" : "rejected") + '">' +
     escapeHtml(data.predicted_status) + ' in this model</span></p><p>Estimated approval probability: <strong>' + percent(data.approval_probability) +
     '</strong> · Decision threshold: <strong>' + percent(data.decision_threshold) + "</strong></p>" +
@@ -254,21 +256,30 @@ async function loadSchema() {
 }
 async function loadHealth() {
   const statusText = $("#api-status");
+  const detail = $("#api-details");
   try {
     const health = await apiFetch("/api/health");
     if (health.model_loaded) {
       statusText.textContent = "Model loaded";
       statusText.title = "The trained model was loaded successfully.";
       statusText.classList.remove("error-text");
+      detail.hidden = true;
+      detail.textContent = "";
     } else {
       statusText.textContent = "Model needs setup";
-      statusText.title = health.model_error || "The model artifact is missing or could not be loaded. Forms remain available.";
+      statusText.title = health.model_error || "The model artifact is missing or could not be loaded.";
       statusText.classList.add("error-text");
+      detail.textContent = "The input forms are available, but prediction and SHAP requests need a working model. " +
+        (health.model_error ? "Model error: " + health.model_error + " " : "") +
+        "After activating .venv, run: python train_model.py";
+      detail.hidden = false;
     }
   } catch (_) {
     statusText.textContent = "API unavailable";
     statusText.title = "Start the FastAPI server to submit predictions.";
     statusText.classList.add("error-text");
+    detail.textContent = "The API is unavailable. Start it in the project root with: .\\.venv\\Scripts\\python.exe -m uvicorn backend.main:app --reload";
+    detail.hidden = false;
   }
 }
 async function loadModelInfo() {

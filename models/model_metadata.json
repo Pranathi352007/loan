@@ -1,0 +1,77 @@
+{
+    "model_name": "GradientBoostingClassifier Pipeline",
+    "pipeline_steps": [
+        "prep (ColumnTransformer with SimpleImputer & OneHotEncoder)",
+        "clf (GradientBoostingClassifier)"
+    ],
+    "feature_schema": {
+        "features": [
+            "no_of_dependents",
+            "education",
+            "self_employed",
+            "income_annum",
+            "loan_amount",
+            "loan_term",
+            "cibil_score",
+            "residential_assets_value",
+            "commercial_assets_value",
+            "luxury_assets_value",
+            "bank_asset_value"
+        ],
+        "numerical_features": [
+            "no_of_dependents",
+            "income_annum",
+            "loan_amount",
+            "loan_term",
+            "cibil_score",
+            "residential_assets_value",
+            "commercial_assets_value",
+            "luxury_assets_value",
+            "bank_asset_value"
+        ],
+        "categorical_features": [
+            "education",
+            "self_employed"
+        ],
+        "transformed_features": [
+            "no_of_dependents",
+            "income_annum",
+            "loan_amount",
+            "loan_term",
+            "cibil_score",
+            "residential_assets_value",
+            "commercial_assets_value",
+            "luxury_assets_value",
+            "bank_asset_value",
+            "education_Not Graduate",
+            "self_employed_Yes"
+        ],
+        "categorical_options": {
+            "education": [
+                "Not Graduate",
+                "Graduate"
+            ],
+            "self_employed": [
+                "No",
+                "Yes"
+            ]
+        }
+    },
+    "target_mapping": {
+        "0": "Rejected",
+        "1": "Approved"
+    },
+    "selected_threshold": 0.46,
+    "base_expected_value": 0.700501282780855,
+    "metrics_summary": {
+        "cv_roc_auc": 0.9490792007395589,
+        "test_accuracy": 0.8783333333333333,
+        "test_precision": 0.8728010825439784,
+        "test_recall": 0.9253945480631277,
+        "test_f1": 0.8983286908077994,
+        "test_roc_auc": 0.9496507326200617
+    },
+    "most_influential_feature": "loan_amount",
+    "training_dataset": "synthetic_loan_dataset (1).csv",
+    "synthetic_disclaimer": "This model was trained on a synthetic dataset for educational and explainability demonstration. It does not represent actual credit decisions made by regulated financial institutions."
+}

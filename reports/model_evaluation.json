@@ -1,0 +1,41 @@
+{
+    "model_name": "GradientBoostingClassifier",
+    "hyperparameters": {
+        "learning_rate": 0.1,
+        "max_depth": 3,
+        "min_samples_leaf": 4,
+        "n_estimators": 150,
+        "subsample": 0.8
+    },
+    "positive_class": "Approved",
+    "negative_class": "Rejected",
+    "selected_threshold": 0.46,
+    "threshold_selection_criterion": "Maximizing F1-score on 5-fold stratified cross-validation out-of-fold predictions",
+    "cross_validation_results": {
+        "mean_cv_roc_auc": 0.9490792007395589,
+        "mean_cv_f1": 0.8964435146443515
+    },
+    "test_metrics": {
+        "accuracy": 0.8783333333333333,
+        "precision": 0.8728010825439784,
+        "recall": 0.9253945480631277,
+        "f1_score": 0.8983286908077994,
+        "roc_auc": 0.9496507326200617,
+        "confusion_matrix": {
+            "true_rejections_tn": 409,
+            "false_approvals_fp": 94,
+            "false_rejections_fn": 52,
+            "true_approvals_tp": 645
+        },
+        "error_counts": {
+            "false_approvals_count": 94,
+            "false_rejections_count": 52,
+            "total_errors": 146
+        }
+    },
+    "trade_off_analysis": {
+        "false_approvals_implication": "Lending to an applicant who would default or fail criteria, leading to financial loss for the institution.",
+        "false_rejections_implication": "Denying credit to a creditworthy borrower, causing lost interest revenue and poor customer experience.",
+        "threshold_recommendation": "Threshold 0.46 strikes an empirical balance on cross-validation."
+    }
+}

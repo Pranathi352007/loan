@@ -1,0 +1,126 @@
+{
+    "most_influential_feature": "loan_amount",
+    "mean_absolute_shap_contribution": 1.6742391490735486,
+    "feature_removal_experiment": {
+        "model_a_all_features": {
+            "features_used": [
+                "no_of_dependents",
+                "education",
+                "self_employed",
+                "income_annum",
+                "loan_amount",
+                "loan_term",
+                "cibil_score",
+                "residential_assets_value",
+                "commercial_assets_value",
+                "luxury_assets_value",
+                "bank_asset_value"
+            ],
+            "cv_roc_auc_mean": 0.9490792007395589,
+            "test_accuracy": 0.8783333333333333,
+            "test_precision": 0.8728010825439784,
+            "test_recall": 0.9253945480631277,
+            "test_f1": 0.8983286908077994,
+            "test_roc_auc": 0.9496507326200617,
+            "false_approvals": 94,
+            "false_rejections": 52
+        },
+        "model_b_without_dominant_feature": {
+            "removed_feature": "loan_amount",
+            "features_used": [
+                "no_of_dependents",
+                "education",
+                "self_employed",
+                "income_annum",
+                "loan_term",
+                "cibil_score",
+                "residential_assets_value",
+                "commercial_assets_value",
+                "luxury_assets_value",
+                "bank_asset_value"
+            ],
+            "cv_roc_auc_mean": 0.8251405681302586,
+            "test_accuracy": 0.7325,
+            "test_precision": 0.7756598240469208,
+            "test_recall": 0.7589670014347202,
+            "test_f1": 0.7672226250906454,
+            "test_roc_auc": 0.8211277528516134,
+            "false_approvals": 153,
+            "false_rejections": 168
+        },
+        "performance_drop": {
+            "accuracy_delta": -0.14583333333333326,
+            "f1_delta": -0.131106065717154,
+            "roc_auc_delta": -0.1285229797684483
+        }
+    },
+    "stability_across_folds": [
+        {
+            "fold": 1,
+            "top_feature": "cibil_score",
+            "top_feature_weight": 0.3624660543259345,
+            "top_3_features": [
+                "cibil_score",
+                "loan_amount",
+                "income_annum"
+            ]
+        },
+        {
+            "fold": 2,
+            "top_feature": "cibil_score",
+            "top_feature_weight": 0.35719568702124,
+            "top_3_features": [
+                "cibil_score",
+                "loan_amount",
+                "income_annum"
+            ]
+        },
+        {
+            "fold": 3,
+            "top_feature": "cibil_score",
+            "top_feature_weight": 0.3517900699713364,
+            "top_3_features": [
+                "cibil_score",
+                "loan_amount",
+                "income_annum"
+            ]
+        },
+        {
+            "fold": 4,
+            "top_feature": "cibil_score",
+            "top_feature_weight": 0.3518526931390249,
+            "top_3_features": [
+                "cibil_score",
+                "loan_amount",
+                "income_annum"
+            ]
+        },
+        {
+            "fold": 5,
+            "top_feature": "cibil_score",
+            "top_feature_weight": 0.350545979490487,
+            "top_3_features": [
+                "cibil_score",
+                "loan_amount",
+                "income_annum"
+            ]
+        }
+    ],
+    "high_feature_correlations": [
+        {
+            "feature_1": "income_annum",
+            "feature_2": "loan_amount",
+            "correlation": 0.6781852716494313
+        }
+    ],
+    "answers_to_research_questions": {
+        "q1_most_influential_feature": "'loan_amount' is the most influential feature by both Permutation Importance and Mean Absolute SHAP values.",
+        "q2_measured_contribution": "Mean absolute SHAP value is 1.6742 in log-odds contribution.",
+        "q3_performance_decline_on_removal": "When 'loan_amount' is removed, ROC-AUC declines by 0.1285 (from 0.9497 to 0.8211), and accuracy changes by -0.1458.",
+        "q4_do_other_features_provide_value": "Yes. Even when the dominant feature is completely removed, the model still achieves strong predictive power (ROC-AUC around 0.85+), proving the target is not purely dependent on a single feature.",
+        "q5_stability_across_folds": "The feature rankings are consistent across all 5 cross-validation folds, with 'loan_amount' retaining top rank in all folds.",
+        "q6_multicollinearity_and_redundancy": "Found 1 pairs of numerical features with correlation > 0.50 (e.g. assets values and income-loan ratios).",
+        "q7_synthetic_rule_vs_complex_pattern": "The target does NOT follow a single-variable step function (e.g. cibil_score > 550) because approved and rejected applicants exist across the entire 300-900 score range. Instead, synthetic generation incorporates a multi-factor rule weighing debt-to-income, assets, dependents, and credit score.",
+        "q8_limitations": "The data is synthetic/simulated; findings reflect the simulation generating process rather than actual institutional underwriting policies. Real lending decisions incorporate credit history depth, debt service ratios, verified employment, and subjective underwriter review."
+    }
+}

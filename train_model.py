@@ -280,57 +280,91 @@ def run_pipeline():
         'permutation_importance_std': perm_res.importances_std
     }).sort_values(by='permutation_importance_mean', ascending=False)
 
-    # SHAP Explainer
+    # SHAP Explainability
     X_train_trans = prep_fitted.transform(X_train)
     X_test_trans = prep_fitted.transform(X_test)
-
     tree_explainer = shap.TreeExplainer(clf_fitted)
-    # SHAP on test set (or representative subset if needed, but 1200 rows with 100 trees runs in a few seconds)
-    test_shap_values = tree_explainer(X_test_trans)
-    mean_abs_shap = np.abs(test_shap_values.values).mean(axis=0)
 
-    # Map transformed features back to original feature groups for clean reporting
-    shap_features_df = pd.DataFrame({
-        'transformed_feature': all_feature_names,
-        'mean_abs_shap': mean_abs_shap
-    }).sort_values(by='mean_abs_shap', ascending=False)
+    # Held-out SHAP values describe the trained model's behaviour on test rows.
+    test_shap_explanation = tree_explainer(X_test_trans)
+    test_shap_array = np.asarray(test_shap_explanation.values)
+    if test_shap_array.ndim == 3:
+        test_output = 1 if test_shap_array.shape[-1] > 1 else 0
+        test_shap_array = test_shap_array[:, :, test_output]
+    if test_shap_array.ndim != 2:
+        raise ValueError(f"Unexpected test SHAP output shape: {test_shap_array.shape}")
+    mean_abs_shap = np.abs(test_shap_array).mean(axis=0)
 
-    # Combine into feature_importance.csv
-    # Merge permutation (original features) with mapped SHAP
-    # Map transformed feature back to original
+    # Select the ablation feature on training data only. The held-out test set remains
+    # reserved for the final comparison rather than selecting which feature to remove.
+    train_sample_count = min(1000, len(X_train_trans))
+    train_shap_sample = X_train_trans[:train_sample_count]
+    train_shap_explanation = tree_explainer(train_shap_sample)
+    train_shap_array = np.asarray(train_shap_explanation.values)
+    if train_shap_array.ndim == 3:
+        train_output = 1 if train_shap_array.shape[-1] > 1 else 0
+        train_shap_array = train_shap_array[:, :, train_output]
+    if train_shap_array.ndim != 2:
+        raise ValueError(f"Unexpected training SHAP output shape: {train_shap_array.shape}")
+    mean_abs_train_shap = np.abs(train_shap_array).mean(axis=0)
+
+    # Map transformed feature names to the original input feature groups.
     shap_to_orig = {}
-    for f in all_feature_names:
+    for transformed_feature in all_feature_names:
         matched = None
-        for orig in X.columns:
-            if f == orig or f.startswith(orig + '_'):
-                matched = orig
+        for original_feature in X.columns:
+            if transformed_feature == original_feature or transformed_feature.startswith(original_feature + "_"):
+                matched = original_feature
                 break
-        shap_to_orig[f] = matched or f
+        shap_to_orig[transformed_feature] = matched or transformed_feature
 
-    shap_features_df['original_feature'] = shap_features_df['transformed_feature'].map(shap_to_orig)
-    orig_shap = shap_features_df.groupby('original_feature')['mean_abs_shap'].sum().reset_index()
+    test_shap_features_df = pd.DataFrame({
+        "transformed_feature": all_feature_names,
+        "mean_abs_shap": mean_abs_shap,
+    })
+    test_shap_features_df["original_feature"] = test_shap_features_df["transformed_feature"].map(shap_to_orig)
+    orig_shap = (
+        test_shap_features_df.groupby("original_feature")["mean_abs_shap"]
+        .sum().reset_index()
+    )
+
+    train_shap_features_df = pd.DataFrame({
+        "transformed_feature": all_feature_names,
+        "mean_abs_shap_train": mean_abs_train_shap,
+    })
+    train_shap_features_df["original_feature"] = train_shap_features_df["transformed_feature"].map(shap_to_orig)
+    orig_shap_train = (
+        train_shap_features_df.groupby("original_feature")["mean_abs_shap_train"]
+        .sum().reset_index()
+        .sort_values("mean_abs_shap_train", ascending=False)
+    )
+    ablation_feature = str(orig_shap_train.iloc[0]["original_feature"])
 
     feature_imp_combined = pd.merge(
         perm_importance_df,
-        orig_shap.rename(columns={'original_feature': 'feature'}),
-        on='feature', how='left'
-    ).sort_values(by='mean_abs_shap', ascending=False)
+        orig_shap.rename(columns={"original_feature": "feature"}),
+        on="feature", how="left"
+    ).sort_values(by="mean_abs_shap", ascending=False)
 
-    feature_imp_combined.to_csv('reports/feature_importance.csv', index=False)
+    feature_imp_combined.to_csv("reports/feature_importance.csv", index=False)
     print("Saved reports/feature_importance.csv:")
     print(feature_imp_combined)
 
-    # Identify most influential feature
-    most_influential_feature = feature_imp_combined.iloc[0]['feature']
-    print(f"\nMost influential feature identified: {most_influential_feature}")
+    # Global ranking used for the dashboard is based on held-out mean absolute SHAP.
+    most_influential_feature = str(feature_imp_combined.iloc[0]["feature"])
+    print(f"Most influential held-out SHAP feature: {most_influential_feature}")
+    print(
+        f"Feature selected for training-only ablation: {ablation_feature} "
+        f"(SHAP sample rows: {train_sample_count})"
+    )
 
     # 8. Feature-Removal Experiment (Model A: All Features vs Model B: Without Most Influential Feature)
     print("\n--- Running Feature-Removal Experiment ---")
-    X_train_b = X_train.drop(columns=[most_influential_feature])
-    X_test_b = X_test.drop(columns=[most_influential_feature])
+    X_train_b = X_train.drop(columns=[ablation_feature])
+    X_test_b = X_test.drop(columns=[ablation_feature])
 
-    cat_cols_b = [c for c in cat_cols if c != most_influential_feature]
-    num_cols_b = [c for c in num_cols if c != most_influential_feature]
+    cat_cols_b = [c for c in cat_cols if c != ablation_feature]
+    num_cols_b = [c for c in num_cols if c != ablation_feature]
 
     preprocessor_b = ColumnTransformer(
         transformers=[
@@ -376,7 +410,7 @@ def run_pipeline():
             'false_rejections': int(fn)
         },
         'model_b_without_dominant_feature': {
-            'removed_feature': most_influential_feature,
+            'removed_feature': ablation_feature,
             'features_used': list(X_train_b.columns),
             'cv_roc_auc_mean': float(scores_b['test_roc_auc'].mean()),
             'test_accuracy': float(accuracy_score(y_test, y_test_pred_b)),
@@ -395,7 +429,7 @@ def run_pipeline():
     }
     print("Feature Removal Experiment Results:")
     print(f"Model A (All features) Test ROC-AUC: {test_roc_auc:.4f}, Acc: {test_acc:.4f}, F1: {test_f1:.4f}")
-    print(f"Model B (No {most_influential_feature}) Test ROC-AUC: {roc_auc_score(y_test, y_test_probs_b):.4f}, Acc: {accuracy_score(y_test, y_test_pred_b):.4f}, F1: {f1_score(y_test, y_test_pred_b):.4f}")
+    print(f"Model B (No {ablation_feature}) Test ROC-AUC: {roc_auc_score(y_test, y_test_probs_b):.4f}, Acc: {accuracy_score(y_test, y_test_pred_b):.4f}, F1: {f1_score(y_test, y_test_pred_b):.4f}")
 
     # 9. Stability Across Folds
     print("\n--- Checking Feature Importance Stability Across Folds ---")
@@ -462,6 +496,12 @@ def run_pipeline():
         'feature_removal_experiment': experiment_comparison,
         'stability_across_folds': fold_rankings,
         'high_feature_correlations': high_corrs,
+        'ablation_feature_selection': {
+            'feature_removed': ablation_feature,
+            'method': 'Highest mean absolute SHAP contribution on a sample of training rows',
+            'training_sample_rows': int(train_sample_count),
+            'held_out_test_set_used_for_selection': False
+        },
         'answers_to_research_questions': {
             'q1_most_influential_feature': (
                 f"'{most_influential_feature}' ranks first by mean absolute SHAP on the held-out test set. "
@@ -470,13 +510,13 @@ def run_pipeline():
             ),
             'q2_measured_contribution': f"Mean absolute SHAP value is {float(orig_shap[orig_shap['original_feature'] == most_influential_feature]['mean_abs_shap'].values[0]):.4f} in log-odds contribution.",
             'q3_performance_decline_on_removal': (
-                f"Removing '{most_influential_feature}' changed held-out ROC-AUC from {test_roc_auc:.4f} "
+                f"Removing '{ablation_feature}' (selected using training SHAP values) changed held-out ROC-AUC from {test_roc_auc:.4f} "
                 f"to {auc_without_top:.4f} (change: {experiment_comparison['performance_drop']['roc_auc_delta']:+.4f}; "
                 "a negative change is a decline). Accuracy changed by "
                 f"{experiment_comparison['performance_drop']['accuracy_delta']:+.4f}."
             ),
             'q4_do_other_features_provide_value': (
-                f"Without '{most_influential_feature}', held-out ROC-AUC was {auc_without_top:.4f}, "
+                f"Without '{ablation_feature}', held-out ROC-AUC was {auc_without_top:.4f}, "
                 f"compared with {test_roc_auc:.4f} for the full model. This measures remaining predictive signal "
                 "on this particular split; it does not prove the target is independent of the removed feature."
             ),

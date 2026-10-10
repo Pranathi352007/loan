@@ -63,12 +63,15 @@ def _require_metadata() -> dict[str, Any]:
 def _require_model_service() -> ModelService:
     try:
         return ModelService.get_instance()
-    except (FileNotFoundError, OSError, ValueError, ImportError) as exc:
+    except Exception as exc:
+        # Serialized-model incompatibilities can raise different exception types
+        # across Python, NumPy, joblib, and scikit-learn versions.
         raise HTTPException(
             status_code=503,
             detail=(
-                "The trained model could not be loaded. Run `python train_model.py` in the project root "
-                f"using the installed requirements. Details: {exc}"
+                "The trained model could not be loaded. Rebuild the model with "
+                "`python train_model.py` from the project root using this environment. "
+                f"Details: {type(exc).__name__}: {exc}"
             ),
         ) from exc
 

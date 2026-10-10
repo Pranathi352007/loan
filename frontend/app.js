@@ -131,7 +131,7 @@ function renderPrediction(data) {
     '<div class="metrics"><div class="metric"><span>Estimated approval probability</span><strong>' + percent(data.approval_probability) + '</strong></div>' +
     '<div class="metric"><span>Estimated rejection probability</span><strong>' + percent(data.rejection_probability) + '</strong></div></div>' +
     '<p class="muted">Decision threshold: <strong>' + percent(data.decision_threshold) + '</strong> · Distance category: <strong>' + escapeHtml(data.confidence_level || "Not supplied") + '</strong></p>' +
-    '<p class="muted">Loan amount / annual income: ' + numberFmt(data.loan_to_annual_income_ratio, 2) + '×</p>' +
+    '<p class="muted">Loan amount / annual income: ' + numberFmt(data.debt_to_income_ratio, 2) + '×</p>' +
     '<div class="warning">' + escapeHtml(data.disclaimer) + "</div></article>";
 }
 function renderFactor(item) {

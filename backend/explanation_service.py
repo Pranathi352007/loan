@@ -93,19 +93,37 @@ class ExplanationService:
 
         df = self.model_service.prepare_dataframe(input_data)
         
-        # Transform input features through pipeline preprocessor
+        # Transform the applicant using the exact preprocessing pipeline used for training.
         X_trans = prep.transform(df)
 
-        # Compute SHAP explanation using TreeExplainer
-        shap_explanation = self.tree_explainer(X_trans)[0]
-        raw_shap_values = shap_explanation.values
-
-        # Base value in log-odds
-        base_val = self.tree_explainer.expected_value
-        if isinstance(base_val, (list, np.ndarray)):
-            base_val = float(base_val[0])
+        # SHAP versions differ in whether a classifier output axis is retained.
+        # Always extract one contribution per transformed feature for the approval output.
+        shap_explanation = self.tree_explainer(X_trans)
+        shap_values = np.asarray(shap_explanation.values)
+        output_index = 0
+        if shap_values.ndim == 3:
+            output_index = 1 if shap_values.shape[-1] > 1 else 0
+            raw_shap_values = shap_values[0, :, output_index].reshape(-1)
+        elif shap_values.ndim == 2:
+            raw_shap_values = shap_values[0, :].reshape(-1)
         else:
-            base_val = float(base_val)
+            raise ValueError(
+                f"Unexpected SHAP value shape {shap_values.shape}; expected a sample-by-feature array."
+            )
+
+        if len(raw_shap_values) != X_trans.shape[1]:
+            raise ValueError(
+                "SHAP output feature count does not match the transformed model input."
+            )
+
+        # TreeExplainer's expected value is on the raw model-output scale.
+        # For a multi-output result, choose class 1 (Approved) when available.
+        base_values = np.asarray(self.tree_explainer.expected_value)
+        if base_values.size > 1:
+            selected_index = min(output_index, base_values.size - 1)
+            base_val = float(base_values.reshape(-1)[selected_index])
+        else:
+            base_val = float(base_values.reshape(-1)[0])
 
         base_prob = float(expit(base_val))
 
@@ -229,38 +247,38 @@ class ExplanationService:
         sign = "positive" if shap_val >= 0 else "negative"
         direction_phrase = "increased the model's predicted approval likelihood" if shap_val >= 0 else "reduced the model's predicted approval likelihood"
 
+        contribution_text = f"SHAP contribution {shap_val:+.3f} on the model's raw output scale {direction_phrase}."
+
         if feat == 'cibil_score':
-            if val >= 750:
-                return f"CIBIL score of {val} is in the prime tier, which strongly {direction_phrase}."
-            elif val < 600:
-                return f"CIBIL score of {val} indicates elevated credit risk, which heavily {direction_phrase}."
-            else:
-                return f"CIBIL score of {val} reflects a moderate credit profile, which {direction_phrase}."
+            return f"CIBIL score of {val} had a learned association with the model output; {contribution_text}"
 
         elif feat == 'loan_amount':
-            income = all_vals.get('income_annum', 1)
-            ratio = val / income if income > 0 else 0
-            return f"Requested loan of ₹{val:,.0f} ({ratio:.1f}x annual income) {direction_phrase}."
+            income = float(all_vals.get('income_annum', 1) or 1)
+            ratio = float(val) / income if income > 0 else 0
+            return f"Requested loan of ₹{val:,.0f} is {ratio:.2f} times the entered annual income; {contribution_text}"
 
         elif feat == 'income_annum':
-            return f"Annual earnings of ₹{val:,.0f} provide cashflow support that {direction_phrase}."
+            return f"Entered annual income of ₹{val:,.0f}; {contribution_text}"
 
         elif feat == 'loan_term':
-            return f"A loan duration of {val} years determines the monthly installment amortization schedule and {direction_phrase}."
+            return f"Entered loan duration of {val} years; {contribution_text}"
 
         elif feat == 'no_of_dependents':
-            return f"Having {val} dependent(s) affects estimated household discretionary surplus, which {direction_phrase}."
+            return f"Entered number of dependents ({val}); {contribution_text}"
 
         elif 'assets_value' in feat or feat == 'bank_asset_value':
-            return f"Asset balance of ₹{val:,.0f} under {display} represents collateral backing and {direction_phrase}."
+            return (
+                f"Recorded {display.lower()} of ₹{val:,.0f}; {contribution_text} "
+                "The dataset does not verify that assets are pledged collateral."
+            )
 
         elif feat == 'education':
-            return f"Applicant education status ('{val}') {direction_phrase} according to learned dataset patterns."
+            return f"Education category ('{val}') followed a learned pattern in this synthetic dataset; {contribution_text}"
 
         elif feat == 'self_employed':
-            return f"Employment type ('{val}') reflects income volatility expectations and {direction_phrase}."
+            return f"Self-employment category ('{val}') followed a learned pattern in this synthetic dataset; {contribution_text}"
 
-        return f"{display} with value {val} {direction_phrase} by {shap_val:+.3f} in log-odds contribution."
+        return f"{display} with value {val}; {contribution_text}"
 
     def _synthesize_reasons(self, sorted_feats: List[Tuple[str, float]], vals: Dict[str, Any], is_approved: bool, prob: float) -> List[str]:
         reasons = []

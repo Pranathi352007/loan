@@ -1,0 +1,17 @@
+LOAN EXPLAINABLE AI — UPDATE BUNDLE
+
+Copy the contents of this folder into the root of your local loan repository, preserving the folders. The provided files add backend/main.py, frontend/, requirements.txt, README.md, tests/, and .gitignore, and replace backend/suggestion_service.py with the import-safe version.
+
+Then, from PowerShell in the repository root:
+  pip install -r requirements.txt
+  python train_model.py        # if artifacts need to be rebuilt
+  pytest -q
+  uvicorn backend.main:app --reload
+
+Visit http://127.0.0.1:8000.
+
+The repository connection available to ChatGPT has read-only permission, so this bundle has not been pushed automatically. After reviewing the changes locally, commit and push them from an account that has write access:
+  git status
+  git add backend/main.py backend/suggestion_service.py frontend requirements.txt README.md tests .gitignore
+  git commit -m "Add explainable loan AI web application"
+  git push

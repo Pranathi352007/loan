@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Educational loan prediction and explainability demo using Gradient Boosting and SHAP." />
+  <title>LoanLens — Explainable Loan AI</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script defer src="/static/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="LoanLens home"><span class="brand-mark">L</span><span>LoanLens <small>EXPLAINABLE AI</small></span></a>
+    <div class="topbar-right"><span class="status-dot"></span><span id="api-status">Checking model status…</span></div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">TRANSPARENT DECISION SUPPORT · PROJECT DEMO</p>
+        <h1>Understand the <em>why</em>, not just the result.</h1>
+        <p class="hero-lead">Explore a Gradient Boosting loan prediction, see the applicant-level factors that influenced it, and review evidence-based next steps.</p>
+        <div class="hero-pills"><span>Gradient Boosting</span><span>SHAP explanations</span><span>Feature-dependency checks</span></div>
+      </div>
+      <div class="hero-orbit" aria-hidden="true"><div class="orbit-ring ring-one"></div><div class="orbit-ring ring-two"></div><div class="orbit-core"><span>AI</span><small>+ EXPLAINABILITY</small></div><span class="orbit-node node-one">01</span><span class="orbit-node node-two">SHAP</span><span class="orbit-node node-three">02</span></div>
+    </section>
+
+    <section class="notice" role="note"><span class="notice-icon">i</span><p><strong>Educational demonstration only.</strong> The model uses a synthetic dataset. Its predictions and SHAP values are not actual bank policy, a credit decision, or financial advice; they must not be used to approve or deny real applicants.</p></section>
+
+    <section class="workspace">
+      <aside class="side-nav" aria-label="Project tools">
+        <p class="nav-caption">WORKSPACE</p>
+        <button class="nav-item active" data-tab="predict-panel"><span class="nav-number">01</span><span><strong>Loan prediction</strong><small>Estimate a model outcome</small></span><span class="nav-arrow">↗</span></button>
+        <button class="nav-item" data-tab="explain-panel"><span class="nav-number">02</span><span><strong>Reasons & suggestions</strong><small>Inspect SHAP contributions</small></span><span class="nav-arrow">↗</span></button>
+        <button class="nav-item" data-tab="dependency-panel"><span class="nav-number">03</span><span><strong>Feature dependency</strong><small>Audit model reliance</small></span><span class="nav-arrow">↗</span></button>
+        <div class="side-note"><span class="side-note-mark">✳</span><strong>What makes it explainable?</strong><p>Predictions are paired with model-based evidence and a test of how performance changes when the top feature is removed.</p></div>
+      </aside>
+
+      <div class="content-area">
+        <section id="predict-panel" class="tab-panel active">
+          <div class="section-heading"><div><p class="eyebrow">01 / PREDICTION</p><h2>Loan prediction</h2><p>Enter applicant values to estimate the class and predicted approval probability.</p></div><span class="step-label">INPUT → PREDICT</span></div>
+          <form id="predict-form" class="form-card"><div id="predict-fields" class="field-grid"><p class="loading-copy">Loading feature schema…</p></div><div class="form-footer"><p>Use fictional or anonymised values only.</p><button class="primary-button" type="submit">Run prediction <span>→</span></button></div></form>
+          <div id="predict-result" class="result-slot" aria-live="polite"></div>
+        </section>
+
+        <section id="explain-panel" class="tab-panel">
+          <div class="section-heading"><div><p class="eyebrow">02 / EXPLAINABILITY</p><h2>Reasons & suggestions</h2><p>Submit an applicant profile independently to get local SHAP-based drivers and responsible suggestions.</p></div><span class="step-label">INPUT → EXPLAIN</span></div>
+          <form id="explain-form" class="form-card"><div id="explain-fields" class="field-grid"><p class="loading-copy">Loading feature schema…</p></div><div class="form-footer"><p>SHAP explains this model, not a bank’s internal reasoning.</p><button class="primary-button" type="submit">Explain this profile <span>→</span></button></div></form>
+          <div id="explain-result" class="result-slot" aria-live="polite"></div>
+        </section>
+
+        <section id="dependency-panel" class="tab-panel">
+          <div class="section-heading"><div><p class="eyebrow">03 / MODEL AUDIT</p><h2>Feature dependency analysis</h2><p>Review global importance, cross-validation stability, and the ablation experiment.</p></div><span class="step-label">MEASURE → COMPARE</span></div>
+          <div class="audit-intro"><span class="audit-symbol">⌁</span><div><strong>Is the model relying too much on one feature?</strong><p>We compare the full model with a second model trained without its most influential feature. A large performance change is a warning to investigate—not proof of unfairness by itself.</p></div></div>
+          <div id="dependency-result" class="audit-grid"><div class="loading-card">Loading dependency report…</div></div>
+          <div class="disclaimer-inline">Interpretation note: importance indicates association with model behaviour, not causation. Correlated features can share or substitute for importance.</div>
+        </section>
+      </div>
+    </section>
+
+    <section class="metrics-strip" aria-label="Model overview">
+      <div><span class="metric-label">MODEL</span><strong id="metric-model">Gradient Boosting</strong></div>
+      <div><span class="metric-label">APPROVAL THRESHOLD</span><strong id="metric-threshold">—</strong></div>
+      <div><span class="metric-label">TEST ROC-AUC</span><strong id="metric-auc">—</strong></div>
+      <div><span class="metric-label">TOP GLOBAL FEATURE</span><strong id="metric-feature">—</strong></div>
+    </section>
+
+    <footer class="footer"><span>LOANLENS · EXPLAINABLE AI PROJECT</span><span>Built for learning, inspection, and responsible discussion.</span></footer>
+  </main>
+</body>
+</html>

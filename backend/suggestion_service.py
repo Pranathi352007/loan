@@ -1,5 +1,10 @@
-from typing import List, Dict, Any
+"""Responsible, conditional suggestions for the educational loan demo."""
+from __future__ import annotations
+
+from typing import List
+
 from backend.schemas import LoanApplicationInput
+
 
 class SuggestionService:
     @staticmethod
@@ -7,95 +12,71 @@ class SuggestionService:
         input_data: LoanApplicationInput,
         is_approved: bool,
         top_negative_factors: List[str],
-        top_positive_factors: List[str]
-    ) -> TupleList:
-        """
-        Generates responsible, evidence-based, conditional financial educational suggestions.
-        Never recommends altering demographic/protected attributes (dependents, education).
-        Does not promise approval.
+        top_positive_factors: List[str],
+    ) -> List[str]:
+        """Return educational options, not promises or instructions to game a model.
+
+        Demographic and other sensitive characteristics are not recommended for alteration.
+        SHAP factors are accepted for future presentation but deterministic suggestions below
+        are based on interpretable financial quantities only.
         """
         suggestions: List[str] = []
-        income = input_data.income_annum if input_data.income_annum > 0 else 1.0
-        dti = input_data.loan_amount / income
+        income = max(float(input_data.income_annum), 1.0)
+        loan_amount = float(input_data.loan_amount)
+        dti_multiple = loan_amount / income
         total_assets = (
-            max(0, input_data.residential_assets_value) +
-            input_data.commercial_assets_value +
-            input_data.luxury_assets_value +
-            input_data.bank_asset_value
+            max(0.0, float(input_data.residential_assets_value))
+            + float(input_data.commercial_assets_value)
+            + float(input_data.luxury_assets_value)
+            + float(input_data.bank_asset_value)
         )
-        asset_coverage = total_assets / input_data.loan_amount if input_data.loan_amount > 0 else 0
+        asset_coverage = total_assets / loan_amount if loan_amount > 0 else 0.0
 
         if not is_approved:
-            # 1. Credit Score Analysis
             if input_data.cibil_score < 650:
                 suggestions.append(
-                    f"Credit Profile (CIBIL {input_data.cibil_score}): A credit score under 650 significantly reduces the model's approval confidence. "
-                    "Consider checking your credit report from official bureaus for inaccuracies, disputing errors, and steadily establishing on-time payments "
-                    "on existing debts before re-applying."
+                    f"Credit report review: the supplied CIBIL score is {input_data.cibil_score}. Consider obtaining your official credit report, correcting verified errors, and maintaining on-time repayments. These steps may improve a future credit review but do not guarantee approval."
                 )
             elif input_data.cibil_score < 720:
                 suggestions.append(
-                    f"Credit Maintenance (CIBIL {input_data.cibil_score}): While moderate, improving your score towards 750+ through consistent low credit utilization "
-                    "and timely EMI repayments could strengthen future loan evaluations."
+                    f"Credit maintenance: the supplied CIBIL score is {input_data.cibil_score}. Review credit utilisation and repayment history, and avoid taking on debt that would be difficult to service. A different score does not guarantee a different lending outcome."
                 )
 
-            # 2. Debt-to-Income & Requested Amount
-            if dti > 3.0:
-                recommended_amount = int(income * 2.5)
+            if dti_multiple > 3.0:
+                illustrative_amount = int(income * 2.5)
                 suggestions.append(
-                    f"Loan Sizing & Debt Burden: The requested loan (₹{input_data.loan_amount:,.0f}) is {dti:.1f}x your annual income (₹{input_data.income_annum:,.0f}). "
-                    f"Lenders generally seek lower debt-to-income multiples. Exploring a smaller loan request (e.g., around ₹{recommended_amount:,.0f}) "
-                    "or extending the loan term may enhance affordability and repayment feasibility."
+                    f"Affordability review: the requested amount is {dti_multiple:.1f} times the entered annual income. Compare the expected EMI against household expenses and existing debt. You could discuss a smaller amount (illustrative comparison only: ₹{illustrative_amount:,.0f}) or a different term with a qualified lender."
                 )
-
-            # 3. Asset & Reserve Backing
             if asset_coverage < 1.0:
                 suggestions.append(
-                    f"Collateral & Net Worth Backing: Total recorded assets (₹{total_assets:,.0f}) are less than the requested loan (₹{input_data.loan_amount:,.0f}). "
-                    "Reviewing opportunities to offer verifiable collateral, additional co-signers with solid backing, or building higher savings reserves can mitigate lender risk."
+                    f"Asset and liability review: the entered assets total about ₹{total_assets:,.0f}, compared with a requested loan of ₹{loan_amount:,.0f}. Verify asset valuations and any existing liabilities; collateral requirements vary by lender and product."
                 )
-
-            # 4. Liquid Bank Balance
-            if input_data.bank_asset_value < input_data.loan_amount * 0.15:
+            if float(input_data.bank_asset_value) < loan_amount * 0.15:
                 suggestions.append(
-                    f"Liquidity Buffer: Verifiable bank savings of ₹{input_data.bank_asset_value:,.0f} represent under 15% of the requested loan. "
-                    "Maintaining a 3 to 6-month liquidity buffer can demonstrate readiness for unexpected economic shocks."
+                    "Cash-flow buffer: consider whether you can retain an emergency reserve for essential costs and repayments. Do not drain savings solely to improve a model score; compare the full cost and risks first."
                 )
-
-            # 5. Loan Term consideration
-            if input_data.loan_term < 5 and dti > 2.0:
+            if input_data.loan_term < 5 and dti_multiple > 2.0:
                 suggestions.append(
-                    f"Repayment Horizon: A short loan term of {input_data.loan_term} years results in heavy monthly installment pressures relative to income. "
-                    "Inquiring with a certified lending officer about a structured longer repayment tenure may lower periodic payments."
+                    "Repayment schedule: a short term can increase the monthly EMI. Ask a qualified lender to compare written repayment schedules for suitable terms, including total interest and fees."
                 )
-
-            # Generic fallback if specific conditions are not triggered
             if not suggestions:
                 suggestions.append(
-                    "Comprehensive Underwriter Review: The model detected a combination of risk factors. "
-                    "Consulting with a licensed loan officer or accredited financial counselor can help clarify institution-specific lending criteria and alternative financing options."
+                    "Request a human review: the model output is only a synthetic-data estimate. Ask a qualified lender for the specific, verifiable factors relevant to its product and consider independent financial counselling before reapplying."
                 )
         else:
-            # Positive / Approved Guidance
             suggestions.append(
-                f"Credit Stewardship: Your current CIBIL score of {input_data.cibil_score} is a strong positive pillar. "
-                "Maintain this standing by avoiding multiple simultaneous credit inquiries and keeping credit card utilization below 30%."
+                "Maintain repayment capacity: keep an emergency reserve and make sure the expected EMI remains affordable if income or expenses change. The model output is not a loan offer or guarantee."
             )
-            if dti > 3.5:
+            if dti_multiple > 3.5:
                 suggestions.append(
-                    f"Affordability Caution: Although predicted approved, your loan amount is {dti:.1f}x your annual income. "
-                    "Before signing a binding credit agreement, independently verify that the scheduled monthly EMI fits comfortably within your household budget."
+                    f"Affordability caution: the requested amount is {dti_multiple:.1f} times the entered annual income. Review the EMI and total repayment against a realistic household budget before accepting any offer."
                 )
-            if input_data.bank_asset_value > 0:
+            if float(input_data.bank_asset_value) > 0:
                 suggestions.append(
-                    f"Emergency Fund Preservation: With ₹{input_data.bank_asset_value:,.0f} in bank reserves, ensure your emergency fund remains liquid "
-                    "rather than exhausting savings toward processing fees or upfront expenses."
+                    "Preserve liquidity: confirm how much of the entered bank balance should remain available for emergencies instead of using it all for fees or upfront payments."
                 )
             suggestions.append(
-                "Terms Comparison: Always request formal Key Fact Statements (KFS) from prospective lenders to compare Annual Percentage Rates (APR), "
-                "foreclosure charges, and processing fees before committing."
+                "Compare written offers: review the annualised cost, interest type, processing fees, late-payment charges, prepayment terms, and repayment schedule before signing a loan agreement."
             )
 
         return suggestions
-
-TupleList = List[str]

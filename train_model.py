@@ -359,7 +359,7 @@ def run_pipeline():
     model_b.fit(X_train_b, y_train)
 
     y_test_probs_b = model_b.predict_proba(X_test_b)[:, 1]
-    y_test_pred_b = (y_test_probs_b >= 0.5).astype(int)
+    y_test_pred_b = (y_test_probs_b >= best_thresh).astype(int)
 
     tn_b, fp_b, fn_b, tp_b = confusion_matrix(y_test, y_test_pred_b).ravel()
 
@@ -444,6 +444,17 @@ def run_pipeline():
                     'correlation': float(c_val)
                 })
 
+    # Produce examples from observed data instead of making unsupported fixed claims.
+    correlation_examples = ", ".join(
+        f"{pair['feature_1']} / {pair['feature_2']} ({pair['correlation']:.2f})"
+        for pair in high_corrs[:3]
+    )
+    stable_top_count = sum(
+        fold["top_feature"] == most_influential_feature for fold in fold_rankings
+    )
+    auc_without_top = float(roc_auc_score(y_test, y_test_probs_b))
+    accuracy_without_top = float(accuracy_score(y_test, y_test_pred_b))
+
     # Compile dependency analysis report
     dependency_analysis = {
         'most_influential_feature': most_influential_feature,
@@ -452,13 +463,37 @@ def run_pipeline():
         'stability_across_folds': fold_rankings,
         'high_feature_correlations': high_corrs,
         'answers_to_research_questions': {
-            'q1_most_influential_feature': f"'{most_influential_feature}' is the most influential feature by both Permutation Importance and Mean Absolute SHAP values.",
+            'q1_most_influential_feature': (
+                f"'{most_influential_feature}' ranks first by mean absolute SHAP on the held-out test set. "
+                "Permutation importance is also reported and can rank features differently because it measures "
+                "the performance change after shuffling each original feature."
+            ),
             'q2_measured_contribution': f"Mean absolute SHAP value is {float(orig_shap[orig_shap['original_feature'] == most_influential_feature]['mean_abs_shap'].values[0]):.4f} in log-odds contribution.",
-            'q3_performance_decline_on_removal': f"When '{most_influential_feature}' is removed, ROC-AUC declines by {abs(experiment_comparison['performance_drop']['roc_auc_delta']):.4f} (from {test_roc_auc:.4f} to {roc_auc_score(y_test, y_test_probs_b):.4f}), and accuracy changes by {experiment_comparison['performance_drop']['accuracy_delta']:.4f}.",
-            'q4_do_other_features_provide_value': "Yes. Even when the dominant feature is completely removed, the model still achieves strong predictive power (ROC-AUC around 0.85+), proving the target is not purely dependent on a single feature.",
-            'q5_stability_across_folds': f"The feature rankings are consistent across all 5 cross-validation folds, with '{most_influential_feature}' retaining top rank in all folds.",
-            'q6_multicollinearity_and_redundancy': f"Found {len(high_corrs)} pairs of numerical features with correlation > 0.50 (e.g. assets values and income-loan ratios).",
-            'q7_synthetic_rule_vs_complex_pattern': "The target does NOT follow a single-variable step function (e.g. cibil_score > 550) because approved and rejected applicants exist across the entire 300-900 score range. Instead, synthetic generation incorporates a multi-factor rule weighing debt-to-income, assets, dependents, and credit score.",
+            'q3_performance_decline_on_removal': (
+                f"Removing '{most_influential_feature}' changed held-out ROC-AUC from {test_roc_auc:.4f} "
+                f"to {auc_without_top:.4f} (change: {experiment_comparison['performance_drop']['roc_auc_delta']:+.4f}; "
+                "a negative change is a decline). Accuracy changed by "
+                f"{experiment_comparison['performance_drop']['accuracy_delta']:+.4f}."
+            ),
+            'q4_do_other_features_provide_value': (
+                f"Without '{most_influential_feature}', held-out ROC-AUC was {auc_without_top:.4f}, "
+                f"compared with {test_roc_auc:.4f} for the full model. This measures remaining predictive signal "
+                "on this particular split; it does not prove the target is independent of the removed feature."
+            ),
+            'q5_stability_across_folds': (
+                f"In {stable_top_count} of {len(fold_rankings)} training folds, the top feature by tree impurity "
+                f"importance matched '{most_influential_feature}', which was selected by global mean absolute SHAP. "
+                "These are different importance measures and should not be treated as identical."
+            ),
+            'q6_multicollinearity_and_redundancy': (
+                f"Found {len(high_corrs)} numeric feature pair(s) with absolute Pearson correlation above 0.50. "
+                f"Examples from this dataset: {correlation_examples if correlation_examples else 'none'}."
+            ),
+            'q7_synthetic_rule_vs_complex_pattern': (
+                "The exact synthetic label-generation rule cannot be established reliably from the model results alone. "
+                "Inspect the original data-generation process if available. High test scores can reflect patterns built "
+                "into synthetic labels and do not establish performance on real lending data."
+            ),
             'q8_limitations': "The data is synthetic/simulated; findings reflect the simulation generating process rather than actual institutional underwriting policies. Real lending decisions incorporate credit history depth, debt service ratios, verified employment, and subjective underwriter review."
         }
     }

@@ -178,7 +178,10 @@ function renderDependency(report) {
     return "<li>Fold " + escapeHtml(row.fold) + ": " + escapeHtml(niceFeature(row.top_feature)) + " ranked first by tree feature importance.</li>";
   }).join("") + "</ul>" : '<p class="muted">Fold rankings are not available.</p>';
   const correlations = Array.isArray(report.high_feature_correlations) ? report.high_feature_correlations : [];
-  return '<div class="dependency-card"><h3>Most influential global feature</h3><div class="large">' +
+  const statusNote = report.report_status
+    ? '<div class="dependency-card wide"><p class="muted">' + escapeHtml(report.report_status) + "</p></div>"
+    : "";
+  return statusNote + '<div class="dependency-card"><h3>Most influential global feature</h3><div class="large">' +
     escapeHtml(niceFeature(report.most_influential_feature || "Not available")) + "</div><p class=\"muted\">Mean absolute SHAP: " +
     numberFmt(report.mean_absolute_shap_contribution, 4) + "</p></div>" +
     '<div class="dependency-card"><h3>Feature removal test</h3><p>Full model ROC-AUC: <strong>' + numberFmt(full.test_roc_auc, 3) +

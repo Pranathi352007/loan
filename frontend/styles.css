@@ -30,7 +30,9 @@ h2 { margin: 0 0 6px; font-size: 23px; }
 h3 { margin: 0 0 8px; font-size: 17px; }
 p { margin-top: 6px; }
 .page-header p { margin-bottom: 0; color: var(--muted); }
-.api-status { max-width: 230px; text-align: right; font-size: 12px; }
+.api-status { max-width: 300px; text-align: right; font-size: 12px; }
+.api-status.error-text { color: var(--red); }
+.status-error { max-width: 980px; margin: 12px auto 0; }
 main { max-width: 980px; margin: 0 auto; padding: 22px 20px 36px; }
 .notice {
   padding: 13px 15px;

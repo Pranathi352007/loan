@@ -8,7 +8,7 @@ client = TestClient(app)
 def test_homepage_is_served():
     response = client.get("/")
     assert response.status_code == 200
-    assert "LoanLens" in response.text
+    assert "Loan Explainable AI" in response.text
 
 
 def test_health_endpoint_shape():
@@ -18,6 +18,8 @@ def test_health_endpoint_shape():
     assert payload["status"] in {"ready", "setup_required"}
     assert "model_artifact_present" in payload
     assert "metadata_present" in payload
+    assert "model_loaded" in payload
+    assert "model_error" in payload
 
 
 def test_schema_contains_expected_fields():
@@ -32,6 +34,15 @@ def test_schema_contains_expected_fields():
     assert "loan_amount" in names
     assert "income_annum" in names
     assert "cibil_score" in names
+
+
+def test_frontend_assets_are_served():
+    css_response = client.get("/static/styles.css")
+    js_response = client.get("/static/app.js")
+    assert css_response.status_code == 200
+    assert ".field input" in css_response.text
+    assert js_response.status_code == 200
+    assert 'addFormHandler("#predict-form"' in js_response.text
 
 
 def test_unknown_path_is_not_accidentally_served():

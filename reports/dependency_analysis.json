@@ -114,13 +114,14 @@
         }
     ],
     "answers_to_research_questions": {
-        "q1_most_influential_feature": "'loan_amount' is the most influential feature by both Permutation Importance and Mean Absolute SHAP values.",
-        "q2_measured_contribution": "Mean absolute SHAP value is 1.6742 in log-odds contribution.",
-        "q3_performance_decline_on_removal": "When 'loan_amount' is removed, ROC-AUC declines by 0.1285 (from 0.9497 to 0.8211), and accuracy changes by -0.1458.",
-        "q4_do_other_features_provide_value": "Yes. Even when the dominant feature is completely removed, the model still achieves strong predictive power (ROC-AUC around 0.85+), proving the target is not purely dependent on a single feature.",
-        "q5_stability_across_folds": "The feature rankings are consistent across all 5 cross-validation folds, with 'loan_amount' retaining top rank in all folds.",
-        "q6_multicollinearity_and_redundancy": "Found 1 pairs of numerical features with correlation > 0.50 (e.g. assets values and income-loan ratios).",
-        "q7_synthetic_rule_vs_complex_pattern": "The target does NOT follow a single-variable step function (e.g. cibil_score > 550) because approved and rejected applicants exist across the entire 300-900 score range. Instead, synthetic generation incorporates a multi-factor rule weighing debt-to-income, assets, dependents, and credit score.",
+        "q1_most_influential_feature": "'loan_amount' ranks first by mean absolute SHAP in this saved report (mean absolute SHAP 1.6742). Permutation importance also ranks loan_amount first in this saved report. The measures can differ because permutation importance measures the performance change when a feature is shuffled.",
+        "q2_measured_contribution": "Mean absolute SHAP value is 1.6742 on the Gradient Boosting model's raw output scale.",
+        "q3_performance_decline_on_removal": "In the previously saved ablation experiment, ROC-AUC changed from 0.9497 to 0.8211 (change -0.1285). However, the old full-model class metrics used threshold 0.46 while the reduced-model class metrics used 0.50, so accuracy, precision, recall, and F1 deltas should be regenerated before comparing.",
+        "q4_do_other_features_provide_value": "In the previously saved experiment, the model without loan_amount had held-out ROC-AUC 0.8211 versus 0.9497 for the full model. This suggests other features retain predictive signal on this split, but does not prove independence from the removed feature or real-world usefulness.",
+        "q5_stability_across_folds": "0 of 5 training folds ranked loan_amount first by tree impurity importance, matching the held-out mean-absolute-SHAP top feature. These are different importance measures; the saved fold list should be read directly.",
+        "q6_multicollinearity_and_redundancy": "Found 1 numerical feature pair(s) with absolute Pearson correlation above 0.50. income_annum / loan_amount (0.68)",
+        "q7_synthetic_rule_vs_complex_pattern": "The exact synthetic label-generation rule cannot be established from model results alone. Inspect the original data-generation process if available. High test scores can reflect patterns built into synthetic labels and do not establish performance on real lending data.",
         "q8_limitations": "The data is synthetic/simulated; findings reflect the simulation generating process rather than actual institutional underwriting policies. Real lending decisions incorporate credit history depth, debt service ratios, verified employment, and subjective underwriter review."
-    }
+    },
+    "report_status": "STALE SUMMARY: these committed ablation metrics were generated before the current code selected the removed feature using training-row SHAP and used the same selected threshold for both models' class metrics. Run train_model.py to regenerate this report. ROC-AUC itself does not depend on the decision threshold, but the stored accuracy, precision, recall, F1, and error counts for Model B may change."
 }

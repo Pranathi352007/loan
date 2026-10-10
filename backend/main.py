@@ -1,6 +1,7 @@
 """FastAPI application for the Loan Explainable AI demonstration."""
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ FRONTEND_DIR = ROOT_DIR / "frontend"
 MODEL_METADATA_PATH = ROOT_DIR / "models" / "model_metadata.json"
 EVALUATION_PATH = ROOT_DIR / "reports" / "model_evaluation.json"
 DEPENDENCY_PATH = ROOT_DIR / "reports" / "dependency_analysis.json"
+FEATURE_IMPORTANCE_PATH = ROOT_DIR / "reports" / "feature_importance.csv"
 
 app = FastAPI(
     title="Loan Explainable AI",
@@ -81,16 +83,30 @@ def homepage() -> FileResponse:
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
-    """Lightweight health check that does not load the model into memory."""
-    return {
-        "status": "ready" if MODEL_METADATA_PATH.exists() else "setup_required",
-        "model_artifact_present": (ROOT_DIR / "models" / "gradient_boosting_pipeline.pkl").exists(),
-        "metadata_present": MODEL_METADATA_PATH.exists(),
-        "dataset_present": (ROOT_DIR / "synthetic_loan_dataset (1).csv").exists()
-        or (ROOT_DIR / "data" / "loan_dataset.csv").exists(),
-        "note": "A ready response does not mean the model has been externally validated.",
-    }
+    """Report artifact presence and whether the serialized model really loads."""
+    model_error = None
+    model_loaded = False
+    try:
+        ModelService.get_instance()
+        model_loaded = True
+    except Exception as exc:
+        model_error = f"{type(exc).__name__}: {exc}"
 
+    dataset_present = (
+        (ROOT_DIR / "synthetic_loan_dataset (1).csv").exists()
+        or (ROOT_DIR / "data" / "loan_dataset.csv").exists()
+    )
+    artifact_present = (ROOT_DIR / "models" / "gradient_boosting_pipeline.pkl").exists()
+    metadata_present = MODEL_METADATA_PATH.exists()
+    return {
+        "status": "ready" if model_loaded else "setup_required",
+        "model_loaded": model_loaded,
+        "model_error": model_error,
+        "model_artifact_present": artifact_present,
+        "metadata_present": metadata_present,
+        "dataset_present": dataset_present,
+        "note": "A loaded model is not evidence of external validity. This project uses synthetic data.",
+    }
 
 @app.get("/api/schema")
 def feature_schema() -> dict[str, Any]:
@@ -119,7 +135,7 @@ def feature_schema() -> dict[str, Any]:
         "no_of_dependents": {"min": 0, "max": 10, "step": 1, "default": 2},
         "education": {"default": "Graduate"},
         "self_employed": {"default": "No"},
-        "income_annum": {"min": 0, "step": 1000, "default": 6000000},
+        "income_annum": {"min": 1, "step": 1000, "default": 6000000},
         "loan_amount": {"min": 1, "step": 1000, "default": 15000000},
         "loan_term": {"min": 1, "max": 30, "step": 1, "default": 10},
         "cibil_score": {"min": 300, "max": 900, "step": 1, "default": 750},
@@ -191,14 +207,35 @@ def model_info() -> ModelInfoResponse:
 
 @app.get("/api/dependency-analysis")
 def dependency_analysis() -> dict[str, Any]:
+    """Return dependency report together with global feature importance rows."""
     report = _read_json(DEPENDENCY_PATH)
     if not report:
         raise HTTPException(
             status_code=404,
             detail="Dependency analysis report was not found. Run `python train_model.py` first.",
         )
-    return report
 
+    # The CSV is the source of the individual feature-level SHAP and permutation values.
+    rows: list[dict[str, Any]] = []
+    if FEATURE_IMPORTANCE_PATH.exists():
+        try:
+            with FEATURE_IMPORTANCE_PATH.open("r", encoding="utf-8", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    parsed: dict[str, Any] = {"feature": row.get("feature", "")}
+                    for key in ("mean_abs_shap", "permutation_importance_mean", "permutation_importance_std"):
+                        try:
+                            parsed[key] = float(row[key]) if row.get(key) not in (None, "") else None
+                        except (TypeError, ValueError):
+                            parsed[key] = None
+                    rows.append(parsed)
+            rows.sort(
+                key=lambda row: row.get("mean_abs_shap") if row.get("mean_abs_shap") is not None else float("-inf"),
+                reverse=True,
+            )
+        except OSError:
+            rows = []
+    report["global_importance"] = rows
+    return report
 
 @app.get("/api/evaluation")
 def evaluation() -> dict[str, Any]:

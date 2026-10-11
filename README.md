@@ -9,8 +9,8 @@ A simple FastAPI + HTML/CSS/JavaScript project for two workflows, using the chec
 Enter the financial and application features on the frontend. The backend:
 1. Uses the saved Gradient Boosting pipeline to estimate Approved/Rejected.
 2. Uses feature-contribution analysis internally to select up to three details related to the estimate.
-3. Sends those details and pre-checked suggestions to Gemini for simple, plain-English wording.
-4. Shows the applicant's values, short reasons, and suggestions when the estimate is Rejected. It does not show raw SHAP values or technical contribution bars.
+3. Uses a decision-specific Gemini prompt to generate one simple reason for each factor. For rejected estimates, it also generates one practical suggestion per factor.
+4. Shows only the top three factors, their displayed values, and their individual reasons. It does not show raw contribution values, probability percentages, technical contribution bars, or a generic AI greeting.
 
 ### 2. Explain an existing application by ID
 
@@ -35,7 +35,7 @@ GEMINI_MODEL=gemini-3.5-flash-lite
 
 You can copy `.env.example` as a starting point. The key is read by the backend only; it is not sent to the browser. **Never commit `.env`, paste the key into Python/JavaScript, or share the key in GitHub.** The repository's `.gitignore` excludes `.env`. If a key was ever committed, revoke it and generate a replacement.
 
-If `GEMINI_API_KEY` is missing or the Gemini request fails, the app shows short, safe fallback explanations and the standard suggestions instead of raw SHAP values. The status line tells you that Gemini is not configured. You can change the model with `GEMINI_MODEL` without editing source code.
+If `GEMINI_API_KEY` is missing or the Gemini request fails, the app shows short fallback reasons and factor-specific suggestions instead of raw SHAP values. The status line tells you that Gemini is not configured. You can change the model with `GEMINI_MODEL` without editing source code.
 
 ## Install and run on Windows
 

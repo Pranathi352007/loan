@@ -118,6 +118,10 @@ def test_application_id_lookup_explains_existing_row():
     assert payload["recorded_decision"] in {"Approved", "Rejected"}
     assert payload["model_prediction"] in {"Approved", "Rejected"}
     assert isinstance(payload["decision_matches_record"], bool)
+    assert "model_explanation" not in payload
+    assert "shap_value" not in str(payload).lower()
+    for factor in payload["factors"]:
+        assert {"feature", "display_name", "applicant_value", "reason"} <= set(factor)
 
 
 def test_unknown_path_is_not_accidentally_served():

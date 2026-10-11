@@ -233,12 +233,9 @@ def _run_explanation(
         explanation = ExplanationService.get_instance().explain(application)
         factors = _select_decision_factors(explanation)
 
-        # The new-app workflow bases suggestions on the model estimate. The existing-record
-        # workflow bases whether suggestions are shown on the stored dataset status.
-        if mode == "application_lookup":
-            rejected_for_suggestions = recorded_decision == "Rejected"
-        else:
-            rejected_for_suggestions = prediction.predicted_status == "Rejected"
+        # Reasons and suggestions must describe the same outcome: the demo's estimate.
+        # A stored dataset label is not a documented lender explanation.
+        rejected_for_suggestions = prediction.predicted_status == "Rejected"
 
         if rejected_for_suggestions:
             suggestions = SuggestionService.generate_suggestions(

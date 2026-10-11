@@ -115,59 +115,83 @@ function setBusy(button, busy, label) {
     if (button.dataset.originalText) button.textContent = button.dataset.originalText;
   }
 }
-function addFactorCards(factors, gemini) {
-  if (!Array.isArray(factors) || !factors.length) return '<p class="muted">No SHAP factors were available.</p>';
-  const explanations = new Map(((gemini && gemini.factor_explanations) || []).map(function (item) { return [item.feature, item.explanation]; }));
-  const maxAbs = Math.max(0.000001, ...factors.map(function (item) { return Math.abs(Number(item.shap_value) || 0); }));
-  return '<ul class="factors">' + factors.map(function (item) {
-    const val = Number(item.shap_value) || 0;
-    const positive = val >= 0;
-    const detail = explanations.get(item.feature) || item.explanation || "Contribution to the model's estimate.";
-    const width = Math.max(1, Math.min(100, Math.abs(val) / maxAbs * 100));
-    return '<li class="factor"><div class="factor-title"><span>' + escapeHtml(item.display_name || niceFeature(item.feature)) +
-      '</span><strong class="' + (positive ? "positive" : "negative") + '">' + signed(val, 4) + "</strong></div>" +
-      '<p class="muted">Applicant value: ' + escapeHtml(item.applicant_value) + " · " + escapeHtml(item.direction) + "</p>" +
-      '<div class="bar"><span class="' + (positive ? "" : "negative") + '" style="width:' + width + '%"></span></div>' +
-      "<p>" + escapeHtml(detail) + "</p></li>";
-  }).join("") + "</ul>";
+function renderFactorCards(factors) {
+  if (!Array.isArray(factors) || !factors.length) {
+    return '<p class="muted">No key details were available for this result.</p>';
+  }
+  return '<div class="factor-grid">' + factors.map(function (item) {
+    const name = item.display_name || niceFeature(item.feature);
+    return '<article class="factor-card"><h4>' + escapeHtml(name) +
+      '</h4><span class="value-label">Your value</span><p class="factor-value">' +
+      escapeHtml(item.applicant_value == null ? "Not available" : item.applicant_value) +
+      '</p></article>';
+  }).join("") + '</div>';
+}
+function renderReasonCards(factors, gemini) {
+  if (!Array.isArray(factors) || !factors.length) {
+    return '<p class="muted">A simple explanation is not available for this result.</p>';
+  }
+  const explanations = new Map(((gemini && gemini.factor_explanations) || []).map(function (item) {
+    return [item.feature, item.explanation];
+  }));
+  return '<div class="reason-list">' + factors.map(function (item) {
+    const name = item.display_name || niceFeature(item.feature);
+    const reason = item.reason || explanations.get(item.feature) ||
+      "This detail was considered as part of the demo's estimate.";
+    return '<article class="reason-card"><h4>' + escapeHtml(name) +
+      '</h4><p>' + escapeHtml(reason) + '</p></article>';
+  }).join("") + '</div>';
+}
+function renderSuggestionCards(suggestions) {
+  if (!Array.isArray(suggestions) || !suggestions.length) return "";
+  return '<section class="suggestions-block"><h3>Suggestions to consider</h3><ul class="suggestion-list">' +
+    suggestions.map(function (item) {
+      const text = typeof item === "string" ? item : (item && item.suggestion) || "";
+      return text ? '<li class="suggestion">' + escapeHtml(text) + '</li>' : "";
+    }).join("") + '</ul></section>';
 }
 function renderResult(data, workflow) {
   const prediction = data.prediction || {};
   const gemini = data.gemini || {};
+  const factors = Array.isArray(data.factors) ? data.factors : [];
   const recorded = data.recorded_decision;
   const predicted = data.model_prediction || prediction.predicted_status || "Unknown";
-  const statusClass = function (value) { return value === "Approved" ? "" : value === "Rejected" ? "rejected" : "neutral"; };
-  let statusSection = '<p><span class="status ' + statusClass(predicted) + '">Model estimate: ' + escapeHtml(predicted) + "</span></p>";
+  const statusClass = function (value) {
+    return value === "Approved" ? "" : value === "Rejected" ? "rejected" : "neutral";
+  };
+
+  let statusSection = '<div class="decision-grid single-decision"><div class="decision-item">' +
+    '<span>Estimated result</span><strong><span class="status ' + statusClass(predicted) + '">' +
+    escapeHtml(predicted) + '</span></strong></div></div>';
   if (workflow === "lookup") {
-    statusSection = '<div class="metrics"><div class="metric"><span>Status stored in dataset</span><strong><span class="status ' + statusClass(recorded) + '">' + escapeHtml(recorded || "Unknown") + '</span></strong></div>' +
-      '<div class="metric"><span>Gradient Boosting estimate</span><strong><span class="status ' + statusClass(predicted) + '">' + escapeHtml(predicted) + "</span></strong></div></div>";
+    statusSection = '<div class="decision-grid">' +
+      '<div class="decision-item"><span>Outcome stored in dataset</span><strong><span class="status ' +
+      statusClass(recorded) + '">' + escapeHtml(recorded || "Unknown") + '</span></strong></div>' +
+      '<div class="decision-item"><span>Demo estimate</span><strong><span class="status ' +
+      statusClass(predicted) + '">' + escapeHtml(predicted) + '</span></strong></div></div>';
   }
+
   const mismatch = workflow === "lookup" && data.decision_matches_record === false;
   const mismatchNote = mismatch
-    ? '<div class="warning"><strong>The stored status and model estimate differ.</strong> SHAP explains the model estimate, not the reason the recorded application received its stored status.</div>'
+    ? '<div class="warning"><strong>The saved outcome and demo estimate are different.</strong> The explanation below describes the demo estimate only. The dataset does not contain the lender’s actual reasons.</div>'
     : "";
-  const geminiLine = gemini.available
-    ? '<p class="gemini-note">Plain-language explanation generated by Gemini (' + escapeHtml(gemini.model || "configured model") + ").</p>"
-    : '<p class="gemini-note">' + escapeHtml(gemini.overview || "Gemini is unavailable. The computed SHAP evidence remains below.") + "</p>";
-  const overview = gemini.available ? '<p>' + escapeHtml(gemini.overview) + "</p>" : "";
-  const probability = prediction.approval_probability !== undefined ? prediction.approval_probability : data.model_explanation && data.model_explanation.approval_probability;
-  const rejectionProbability = prediction.rejection_probability !== undefined ? prediction.rejection_probability : (probability === undefined ? undefined : 1 - Number(probability));
-  const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
-  const suggestionSection = suggestions.length
-    ? "<h3>Suggestions to consider</h3>" + suggestions.map(function (item) { return '<div class="suggestion">' + escapeHtml(item) + "</div>"; }).join("")
+  const overview = gemini.overview
+    ? '<section class="result-overview"><h3>Summary</h3><p>' + escapeHtml(gemini.overview) + '</p></section>'
     : "";
+  const suggestions = renderSuggestionCards(data.suggestions);
   const sourceText = workflow === "lookup"
-    ? "These are factors that influenced the Gradient Boosting model's estimate for this row. The dataset does not contain official bank reasons."
-    : "These are factors that influenced this project's model estimate. They are not actual bank policy.";
-  return '<article class="result-card"><div class="result-header"><div><h3>' + (workflow === "lookup" ? "Application " + escapeHtml(data.application_id) : "Prediction result") +
-    "</h3><p class=\"muted\">" + escapeHtml(sourceText) + "</p></div></div>" +
-    statusSection + mismatchNote +
-    '<div class="metrics"><div class="metric"><span>Estimated approval probability</span><strong>' + percent(probability) + '</strong></div>' +
-    '<div class="metric"><span>Estimated rejection probability</span><strong>' + percent(rejectionProbability) + "</strong></div></div>" +
-    geminiLine + overview +
-    "<h3>Main factors affecting the model estimate</h3>" + addFactorCards(data.factors, gemini) +
-    suggestionSection +
-    '<p class="warning">' + escapeHtml(data.disclaimer || "This is an educational estimate based on synthetic data.") + "</p></article>";
+    ? "This record comes from the demo dataset. The explanation describes the demo estimate, not an actual lender's private reasons."
+    : "This estimate comes from a model trained on synthetic data; it is not a real lender's decision.";
+  const disclaimer = data.disclaimer ||
+    "This is an educational demo using synthetic data. It cannot guarantee loan approval.";
+  return '<article class="result-card"><div class="result-header"><div><h3>' +
+    (workflow === "lookup" ? "Application " + escapeHtml(data.application_id) : "Prediction result") +
+    '</h3><p class="muted">' + escapeHtml(sourceText) + '</p></div></div>' +
+    statusSection + mismatchNote + overview +
+    '<h3>Key details</h3>' + renderFactorCards(factors) +
+    '<h3>Why this result?</h3>' + renderReasonCards(factors, gemini) +
+    suggestions +
+    '<p class="warning">' + escapeHtml(disclaimer) + '</p></article>';
 }
 function showWorkflow(which) {
   const isNew = which === "new";

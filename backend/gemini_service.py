@@ -1,7 +1,8 @@
-"""Applicant-friendly Gemini explanations grounded in locally computed evidence.
+"""Create simple, factor-specific loan reasons using Gemini.
 
-The model and feature-contribution calculations stay on the backend. Public responses
-contain plain-language reasons and applicant values, never raw SHAP contribution values.
+Numerical feature-contribution scores are used internally by the application and are not
+sent to the applicant-facing UI. Prompts receive only the selected feature, displayed name,
+the applicant value (for context), and whether the feature supported or hurt the assessment.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 
 class GeminiExplanationService:
-    """Turn the model's selected factors into simple explanations and safe suggestions."""
+    """Generate one plain-language reason per factor, and suggestions only for rejection."""
 
     _client: Any = None
     _client_key: str | None = None
@@ -37,31 +38,172 @@ class GeminiExplanationService:
         return cls._client
 
     @staticmethod
+    def _friendly_name(factor: dict[str, Any]) -> str:
+        return str(factor.get("display_name") or str(factor.get("feature", "")).replace("_", " ").title())
+
+    @classmethod
+    def _fallback_reason(cls, factor: dict[str, Any], approved: bool) -> str:
+        name = cls._friendly_name(factor)
+        effect = "positively affected" if approved else "negatively affected"
+        return f"{name} {effect} the loan assessment."
+
+    @classmethod
+    def _fallback_suggestion(cls, factor: dict[str, Any]) -> str:
+        """Use conservative advice tied to the given feature if Gemini is unavailable."""
+        feature = str(factor.get("feature", "")).strip().lower()
+        if feature == "cibil_score":
+            return "Check your credit report for errors and try to make payments on time."
+        if feature in {"loan_amount", "loantoIncome".lower()}:
+            return "Check whether a smaller loan amount would be easier to repay."
+        if feature == "income_annum":
+            return "Compare the expected loan payment with your regular income and expenses."
+        if feature == "loan_term":
+            return "Ask the lender whether another repayment period may better fit your budget."
+        if "asset" in feature:
+            return "Check that the asset details and supporting documents in your application are correct."
+        if feature in {"education", "self_employed", "no_of_dependents"}:
+            return "Check that this part of your application is accurate and ask the lender which documents are needed."
+        return "Ask the lender what information may be helpful for a future application."
+
+    @classmethod
     def _fallback(
+        cls,
         factors: list[dict[str, Any]],
-        safe_suggestions: list[str],
         reason: str,
+        approved: bool,
     ) -> dict[str, Any]:
-        """Provide plain-language fallback text; never expose technical contributions."""
-        explanations = []
-        for factor in factors:
-            name = str(factor.get("feature", ""))
-            display_name = str(factor.get("display_name") or name.replace("_", " ").title())
-            direction = str(factor.get("direction", ""))
-            if direction == "Increases Approval":
-                text = f"{display_name} supported the demo's approval estimate."
-            elif direction == "Decreases Approval":
-                text = f"{display_name} moved the demo's estimate toward rejection."
-            else:
-                text = f"{display_name} was considered as part of the demo's estimate."
-            explanations.append({"feature": name, "explanation": text})
+        """Keep the experience useful without showing technical scores if Gemini is offline."""
+        reasons = [
+            {
+                "feature": str(factor.get("feature", "")),
+                "explanation": cls._fallback_reason(factor, approved),
+            }
+            for factor in factors
+        ]
+        suggestions = [] if approved else [
+            {
+                "feature": str(factor.get("feature", "")),
+                "suggestion": cls._fallback_suggestion(factor),
+            }
+            for factor in factors
+        ]
         return {
             "available": False,
-            "model": None,
-            "overview": reason,
-            "factor_explanations": explanations,
-            "suggestions": list(safe_suggestions),
+            "overview": "",
+            "factor_explanations": reasons,
+            "suggestions": suggestions,
         }
+
+    @staticmethod
+    def _parse_array(response_text: str) -> list[dict[str, Any]]:
+        parsed = json.loads((response_text or "").strip())
+        if not isinstance(parsed, list):
+            raise ValueError("Gemini returned a JSON value that was not an array.")
+        return [item for item in parsed if isinstance(item, dict)]
+
+    @classmethod
+    def _build_reason_prompt(
+        cls,
+        *,
+        approved: bool,
+        factors_json: str,
+    ) -> str:
+        decision = "APPROVED" if approved else "REJECTED"
+        effect = "positively" if approved else "negatively"
+        return f"""
+You are an AI loan explanation assistant.
+
+The applicant's loan application was {decision}.
+
+For EACH factor provided below, write ONE simple explanation.
+
+IMPORTANT LANGUAGE RULES:
+
+1. Use VERY SIMPLE ENGLISH.
+2. Write for a person who knows only basic English.
+3. Use short and clear sentences.
+4. Use common everyday words.
+5. Avoid financial jargon and difficult words.
+6. Explain each factor independently.
+7. Do NOT compare one factor with another.
+8. Do NOT combine factors.
+9. Do NOT introduce any factor that is not provided.
+10. Do NOT mention SHAP, machine learning, model, algorithm, prediction, or feature importance.
+11. Do NOT say that a factor definitely caused the {decision.lower()} decision.
+12. Explain that the factor {effect} affected the loan assessment.
+13. Do NOT repeat the applicant's numerical value.
+14. The applicant's actual value will be displayed separately.
+15. Do NOT give recommendations.
+16. Keep each explanation to ONE or TWO short sentences.
+17. Do NOT use difficult financial words.
+18. Return EXACTLY one explanation for EACH provided factor.
+
+IMPORTANT:
+Each explanation MUST be connected to the EXACT feature name provided.
+Copy each "feature" value exactly as it appears in the input.
+
+Return ONLY valid JSON. Do not add markdown or any text outside the JSON array.
+
+Use exactly this format:
+[
+  {{
+    "feature": "exact feature name",
+    "reason": "simple explanation"
+  }}
+]
+
+The factors are:
+{factors_json}
+""".strip()
+
+    @classmethod
+    def _build_suggestion_prompt(cls, factors_json: str) -> str:
+        return f"""
+You are a loan guidance assistant.
+
+The applicant's loan application was REJECTED.
+
+For EACH factor provided below, give ONE practical suggestion.
+
+IMPORTANT RULES:
+
+1. Use VERY SIMPLE ENGLISH.
+2. Write for a person who knows only basic English.
+3. Use short and clear sentences.
+4. Use common everyday words.
+5. Each suggestion must directly relate to its EXACT factor.
+6. Do NOT give suggestions about any other factor.
+7. Do NOT compare the factors.
+8. Do NOT combine the factors.
+9. Do NOT use technical terms such as SHAP, machine learning, model, algorithm, or feature importance.
+10. Do NOT promise that following a suggestion will guarantee approval.
+11. Do NOT say that changing a factor will definitely result in approval.
+12. For cibil_score, suggest checking the credit report, paying on time, and managing existing debt.
+13. For LoanToIncome or loan_amount, suggest considering an amount that is more manageable compared with income.
+14. For loan_term, suggest discussing different loan-period options with the lender.
+15. For income_annum, suggest checking repayment costs against regular income and expenses.
+16. For asset values, suggest checking that the values and supporting documents are correct; do not tell the applicant to acquire more assets.
+17. Do NOT suggest changing education, employment status, number of dependents, or other personal traits. For these details, suggest checking that the application information is correct or asking which documents are needed.
+18. Keep each suggestion to ONE short sentence.
+19. Return EXACTLY one suggestion for EACH provided factor.
+
+IMPORTANT:
+Each suggestion MUST be connected to the EXACT feature name provided.
+Copy each "feature" value exactly as it appears in the input.
+
+Return ONLY valid JSON. Do not add markdown or any text outside the JSON array.
+
+Use exactly this format:
+[
+  {{
+    "feature": "exact feature name",
+    "suggestion": "simple practical suggestion"
+  }}
+]
+
+The factors are:
+{factors_json}
+""".strip()
 
     @classmethod
     def explain(
@@ -76,139 +218,102 @@ class GeminiExplanationService:
         recorded_decision: str | None = None,
         decision_matches_record: bool | None = None,
     ) -> dict[str, Any]:
-        """Generate short, respectful explanations without allowing Gemini to alter a result."""
+        """Return keyed plain-language reasons and factor-specific suggestions."""
+        # The scores/probabilities are deliberately not included in Gemini's prompt.
+        approved = model_prediction == "Approved"
+        is_lookup = mode != "prediction"
+        prompt_factors = [
+            {
+                "feature": str(factor.get("feature", "")),
+                "display_name": cls._friendly_name(factor),
+                "applicant_value": factor.get("applicant_value"),
+                "assessment_effect": "positive" if factor.get("direction") == "Increases Approval" else "negative",
+            }
+            for factor in factors
+        ]
+        factors_json = json.dumps(prompt_factors, ensure_ascii=False, default=str)
         client = cls._get_client()
         if client is None:
             return cls._fallback(
                 factors,
-                safe_suggestions,
-                "A detailed AI-written explanation is unavailable right now. The result shown is an estimate from this educational demo, which uses synthetic data.",
+                "AI-written explanations are temporarily unavailable. These simple reasons are based on the selected details in this educational demo.",
+                approved,
             )
 
-        is_lookup = mode != "prediction"
-        prompt_data = {
-            "workflow": "existing dataset record" if is_lookup else "new applicant details",
-            "demo_estimate": model_prediction,
-            "recorded_dataset_outcome": recorded_decision,
-            "recorded_outcome_matches_estimate": decision_matches_record,
-            "selected_details": [
-                {
-                    "feature": factor.get("feature"),
-                    "plain_name": factor.get("display_name"),
-                    "applicant_value": factor.get("applicant_value"),
-                    "influence_on_demo_estimate": factor.get("direction"),
-                }
-                for factor in factors
-            ],
-            "suggestions_already_checked_for_safety": safe_suggestions,
-        }
-        prompt = f"""
-You are a kind loan-explanation assistant. Write for a person who knows only basic English.
-Use very simple English, common words, and short sentences.
-
-Use ONLY the supplied JSON as evidence. The data is synthetic and is not a real lender's
-policy. The outcome is an estimate from an educational demo, not a loan offer.
-
-Return one valid JSON object with exactly these keys:
-- "overview": a short, friendly summary in 2 or 3 sentences.
-- "factor_explanations": an array with one object for EVERY selected detail. Each object has
-  "feature" (copy the exact feature key) and "explanation" (one or two short sentences).
-- "suggestions": an array of short strings.
-
-Rules for explanations:
-1. Explain each detail on its own. Do not combine or compare different details.
-2. Say how the detail related to the demo's estimate, not that it definitely caused an outcome.
-3. Use the supplied influence label to keep the explanation's direction correct.
-4. Do not repeat the applicant's number or value in the explanation; it is displayed separately.
-5. Do not mention SHAP, contribution values, feature importance, algorithms, or technical model terms.
-6. Do not invent any facts, credit history, lender rules, cut-offs, or guarantees.
-7. Avoid suggesting a person change personal traits such as education, employment status, or dependents.
-8. For an existing record, the saved dataset outcome is only a label; it is not an official explanation
-   from a bank. The factors describe the demo estimate, not the saved outcome's actual cause.
-9. If the saved outcome differs from the demo estimate, clearly say they differ and that the
-   explanation below applies to the demo estimate only.
-10. Keep the overview clear and respectful.
-
-Rules for suggestions:
-1. Only rephrase the supplied safe suggestions. Do not add new advice.
-2. Use basic English and make each suggestion one short sentence.
-3. Do not promise that any action will lead to loan approval.
-4. If the supplied suggestions list is empty, return an empty array.
-5. Never mention SHAP or technical model details.
-
-Evidence JSON:
-{json.dumps(prompt_data, ensure_ascii=False, default=str)}
-""".strip()
-
         model_name = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
+        # Keep exact factor names in the output and fall back per factor if one is omitted.
         try:
-            response = client.models.generate_content(
+            reason_response = client.models.generate_content(
                 model=model_name,
-                contents=prompt,
+                contents=cls._build_reason_prompt(approved=approved, factors_json=factors_json),
                 config=types.GenerateContentConfig(
                     temperature=0.2,
-                    max_output_tokens=800,
+                    max_output_tokens=500,
                     response_mime_type="application/json",
                 ),
             )
-            parsed = json.loads((response.text or "").strip())
-            if not isinstance(parsed, dict):
-                raise ValueError("Gemini response was not a JSON object.")
-
-            allowed_features = {str(factor.get("feature", "")) for factor in factors}
-            explanations: list[dict[str, str]] = []
-            seen: set[str] = set()
-            raw_explanations = parsed.get("factor_explanations", [])
-            if isinstance(raw_explanations, list):
-                for item in raw_explanations:
-                    if not isinstance(item, dict):
-                        continue
-                    feature = str(item.get("feature", "")).strip()
-                    explanation = str(item.get("explanation", "")).strip()
-                    if feature in allowed_features and feature not in seen and explanation:
-                        explanations.append(
-                            {"feature": feature, "explanation": explanation[:500]}
-                        )
-                        seen.add(feature)
-
-            # If Gemini omits an explanation, use a safe plain-language fallback for that detail.
-            fallback_map = {
-                item["feature"]: item["explanation"]
-                for item in cls._fallback(factors, [], "")["factor_explanations"]
-            }
-            for factor in factors:
-                name = str(factor.get("feature", ""))
-                if name not in seen:
-                    explanations.append(
-                        {"feature": name, "explanation": fallback_map.get(name, "This detail was considered in the demo estimate.")}
-                    )
-
-            raw_suggestions = parsed.get("suggestions", [])
-            generated_suggestions: list[str] = []
-            if safe_suggestions and isinstance(raw_suggestions, list):
-                generated_suggestions = [
-                    str(value).strip()[:350]
-                    for value in raw_suggestions
-                    if isinstance(value, str) and value.strip()
-                ][:len(safe_suggestions)]
-            if safe_suggestions and not generated_suggestions:
-                generated_suggestions = list(safe_suggestions)
-
-            overview = str(parsed.get("overview", "")).strip()
-            if not overview:
-                raise ValueError("Gemini response did not contain an overview.")
-
-            return {
-                "available": True,
-                "model": model_name,
-                "overview": overview[:1200],
-                "factor_explanations": explanations,
-                "suggestions": generated_suggestions,
-            }
+            raw_reasons = cls._parse_array(reason_response.text or "")
         except Exception:
-            logger.warning("Gemini explanation failed; using simple fallback text.", exc_info=True)
-            return cls._fallback(
-                factors,
-                safe_suggestions,
-                "A detailed AI-written explanation is unavailable right now. The result shown is an estimate from this educational demo, which uses synthetic data.",
-            )
+            logger.warning("Could not generate factor reasons; using plain-language fallback.", exc_info=True)
+            raw_reasons = []
+
+        allowed = {str(factor.get("feature", "")) for factor in factors}
+        reasons_by_feature: dict[str, str] = {}
+        for item in raw_reasons:
+            feature = str(item.get("feature", "")).strip()
+            reason = str(item.get("reason", "")).strip()
+            if feature in allowed and feature not in reasons_by_feature and reason:
+                reasons_by_feature[feature] = reason[:500]
+
+        factor_explanations = [
+            {
+                "feature": str(factor.get("feature", "")),
+                "explanation": reasons_by_feature.get(
+                    str(factor.get("feature", "")),
+                    cls._fallback_reason(factor, approved),
+                ),
+            }
+            for factor in factors
+        ]
+
+        suggestions: list[dict[str, str]] = []
+        if not approved:
+            try:
+                suggestion_response = client.models.generate_content(
+                    model=model_name,
+                    contents=cls._build_suggestion_prompt(factors_json),
+                    config=types.GenerateContentConfig(
+                        temperature=0.2,
+                        max_output_tokens=500,
+                        response_mime_type="application/json",
+                    ),
+                )
+                raw_suggestions = cls._parse_array(suggestion_response.text or "")
+            except Exception:
+                logger.warning("Could not generate factor suggestions; using safe fallback.", exc_info=True)
+                raw_suggestions = []
+
+            suggestions_by_feature: dict[str, str] = {}
+            for item in raw_suggestions:
+                feature = str(item.get("feature", "")).strip()
+                suggestion = str(item.get("suggestion", "")).strip()
+                if feature in allowed and feature not in suggestions_by_feature and suggestion:
+                    suggestions_by_feature[feature] = suggestion[:350]
+
+            suggestions = [
+                {
+                    "feature": str(factor.get("feature", "")),
+                    "suggestion": suggestions_by_feature.get(
+                        str(factor.get("feature", "")),
+                        cls._fallback_suggestion(factor),
+                    ),
+                }
+                for factor in factors
+            ]
+
+        return {
+            "available": True,
+            "overview": "",
+            "factor_explanations": factor_explanations,
+            "suggestions": suggestions,
+        }

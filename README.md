@@ -7,12 +7,10 @@ A simple FastAPI + HTML/CSS/JavaScript project for two workflows, using the chec
 ### 1. Predict a new loan
 
 Enter the financial and application features on the frontend. The backend:
-1. Uses the saved Gradient Boosting pipeline to estimate Approved/Rejected and the estimated probabilities.
-2. Computes individual SHAP contributions for that application.
-3. Selects the strongest contributions in the direction of the model estimate.
-4. Uses Gemini to explain those computed factors in plain English.
-5. Sends the selected details and safe suggestions to Gemini for plain-language wording. The applicant-facing screen shows simple reasons and useful values, not raw SHAP numbers or technical contribution bars.
-6. Shows educational suggestions when the model estimate is Rejected.
+1. Uses the saved Gradient Boosting pipeline to estimate Approved/Rejected.
+2. Uses feature-contribution analysis internally to select up to three details related to the estimate.
+3. Sends those details and pre-checked suggestions to Gemini for simple, plain-English wording.
+4. Shows the applicant's values, short reasons, and suggestions when the estimate is Rejected. It does not show raw SHAP values or technical contribution bars.
 
 ### 2. Explain an existing application by ID
 
@@ -22,7 +20,7 @@ Enter a `loan_id` from the checked-in CSV. The backend:
 3. Uses internal feature-contribution analysis to select details related to the model's estimate, then asks Gemini to write simple reasons.
 4. Shows suggestions when the dataset row's stored status is Rejected. The screen does not expose numerical SHAP contributions.
 
-**Important:** the dataset stores an outcome label, not the bank's written reasons. SHAP explains the model's behaviour, not the actual internal reasoning of a bank. If the stored decision and model estimate differ, the UI explicitly flags the mismatch. The current checked-in data is synthetic; these IDs are for the demo only.
+**Important:** the dataset stores an outcome label, not a bank's written reasons. The feature-contribution analysis is used internally to select details; Gemini explains those details in simple language. These explanations describe the demo model's estimate, not the actual internal reasoning of a bank. If the stored decision and model estimate differ, the UI flags the mismatch. The checked-in data is synthetic; these IDs are for the demo only.
 
 ## Gemini setup (keep the key private)
 
@@ -109,8 +107,8 @@ python -m pytest -q
 
 ## Interpretation and safety
 
-- Prediction probabilities are model estimates, not guarantees or necessarily calibrated real-world probabilities.
-- Feature-contribution analysis is used internally to choose the strongest details, but numerical SHAP values are not shown in the applicant-facing results. These details do not prove causation or reveal a bank's written reason.
+- The applicant-facing screen shows the status and simple explanations, not prediction probabilities or numerical SHAP values.
+- Feature-contribution analysis is used internally to choose the strongest details. The explanations do not prove causation or reveal a bank's written reason.
 - The existing-ID workflow searches the local CSV. It does not connect to a real bank database.
 - Gemini writes plain-language reasons from selected details and only rephrases pre-computed suggestions. It does not choose the predicted class or compute feature contributions.
 - Synthetic data and labels cannot establish real-world underwriting validity or fairness.

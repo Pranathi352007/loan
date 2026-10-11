@@ -25,19 +25,6 @@ function escapeHtml(value) {
 function niceFeature(value) {
   return String(value || "").replaceAll("_", " ").replace(/\b\w/g, function (ch) { return ch.toUpperCase(); });
 }
-function percent(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? (number * 100).toFixed(1) + "%" : "—";
-}
-function numberFmt(value, digits) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number.toLocaleString(undefined, { maximumFractionDigits: digits == null ? 2 : digits }) : "—";
-}
-function signed(value, digits) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return "—";
-  return (number > 0 ? "+" : "") + number.toFixed(digits == null ? 3 : digits);
-}
 function renderFormFields(container) {
   container.innerHTML = featureFields.map(function (field) {
     const id = container.id + "-" + field.name;

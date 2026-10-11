@@ -69,7 +69,6 @@ class GeminiExplanationService:
     def _fallback(
         cls,
         factors: list[dict[str, Any]],
-        reason: str,
         approved: bool,
     ) -> dict[str, Any]:
         """Keep the experience useful without showing technical scores if Gemini is offline."""
@@ -89,7 +88,6 @@ class GeminiExplanationService:
         ]
         return {
             "available": False,
-            "overview": "",
             "factor_explanations": reasons,
             "suggestions": suggestions,
         }
@@ -236,7 +234,6 @@ The factors are:
         if client is None:
             return cls._fallback(
                 factors,
-                "AI-written explanations are temporarily unavailable. These simple reasons are based on the selected details in this educational demo.",
                 approved,
             )
 
@@ -313,7 +310,6 @@ The factors are:
 
         return {
             "available": True,
-            "overview": "",
             "factor_explanations": factor_explanations,
             "suggestions": suggestions,
         }

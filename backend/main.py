@@ -73,11 +73,7 @@ def _require_model_service() -> ModelService:
         # across Python, NumPy, joblib, and scikit-learn versions.
         raise HTTPException(
             status_code=503,
-            detail=(
-                "The trained model could not be loaded. Rebuild the model with "
-                "`python train_model.py` from the project root using this environment. "
-                f"Details: {type(exc).__name__}: {exc}"
-            ),
+            detail="The prediction service is not ready. Please contact the application administrator.",
         ) from exc
 
 
@@ -316,7 +312,7 @@ def _run_explanation(
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"Could not generate the explanation. Check the model and SHAP packages. Details: {type(exc).__name__}: {exc}",
+            detail="We could not prepare the explanation just now. Please try again.",
         ) from exc
 
 

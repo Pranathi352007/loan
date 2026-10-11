@@ -18,7 +18,6 @@ from backend.gemini_service import GeminiExplanationService
 from backend.model_service import ModelService
 from backend.suggestion_service import SuggestionService
 from backend.schemas import (
-    ExplanationResponse,
     LoanApplicationInput,
     ModelInfoResponse,
     PredictionResponse,
@@ -179,20 +178,10 @@ def predict(application: LoanApplicationInput) -> PredictionResponse:
     return service.predict(application)
 
 
-@app.post("/api/explain", response_model=ExplanationResponse)
-def explain(application: LoanApplicationInput) -> ExplanationResponse:
-    # Ensure artifact-loading failures are converted to helpful API errors.
-    _require_model_service()
-    try:
-        return ExplanationService.get_instance().explain(application)
-    except HTTPException:
-        raise
-    except Exception as exc:  # Return a useful server response rather than leaking a traceback.
-        raise HTTPException(
-            status_code=500,
-            detail=f"SHAP explanation failed. Check the installed package versions and model artifact. Details: {exc}",
-        ) from exc
-
+@app.post("/api/explain")
+def explain(application: LoanApplicationInput) -> dict[str, Any]:
+    """Return the same applicant-friendly explanation format as the main workflow."""
+    return _run_explanation(application, mode="prediction")
 
 
 def _select_decision_factors(explanation: ExplanationResponse) -> list[dict[str, Any]]:
@@ -280,19 +269,46 @@ def _run_explanation(
             recorded_decision=recorded_decision,
             decision_matches_record=decision_matches_record,
         )
+        # Only publish simple, applicant-facing details. Keep numeric contributions internal.
+        generated_reasons = {
+            str(item.get("feature", "")): str(item.get("explanation", "")).strip()
+            for item in gemini.get("factor_explanations", [])
+            if isinstance(item, dict)
+        }
+        public_factors: list[dict[str, Any]] = []
+        for factor in factors:
+            feature = str(factor.get("feature", ""))
+            display_name = str(factor.get("display_name") or feature.replace("_", " ").title())
+            reason = generated_reasons.get(feature, "")
+            if not reason:
+                if factor.get("direction") == "Increases Approval":
+                    reason = f"{display_name} supported the demo's approval estimate."
+                elif factor.get("direction") == "Decreases Approval":
+                    reason = f"{display_name} moved the demo's estimate toward rejection."
+                else:
+                    reason = f"{display_name} was considered as part of the demo's estimate."
+            public_factors.append({
+                "feature": feature,
+                "display_name": display_name,
+                "applicant_value": factor.get("applicant_value"),
+                "reason": reason,
+            })
+
         return {
             "mode": mode,
-            "prediction": prediction.model_dump(),
-            "model_explanation": explanation.model_dump(),
+            "prediction": {
+                "predicted_status": prediction.predicted_status,
+                "is_approved": prediction.is_approved,
+            },
             "recorded_decision": recorded_decision,
             "decision_matches_record": decision_matches_record,
             "model_prediction": prediction.predicted_status,
-            "factors": factors,
+            "factors": public_factors,
             "gemini": gemini,
             "suggestions": gemini.get("suggestions", suggestions) if rejected_for_suggestions else [],
             "disclaimer": (
-                "This project uses synthetic data. SHAP explains this Gradient Boosting model's estimate, "
-                "not a real bank's internal reasoning. A dataset's stored decision is an outcome label, not an explanation."
+                "This educational demo uses synthetic data. The explanations describe the demo's estimate, "
+                "not a real lender's private reasons or a guarantee of loan approval."
             ),
         }
     except HTTPException:

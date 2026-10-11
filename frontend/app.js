@@ -6,14 +6,14 @@ const FALLBACK_FIELDS = [
   { name: "no_of_dependents", label: "Number of dependents", kind: "number", min: 0, max: 10, step: 1, default: 2 },
   { name: "education", label: "Education level", kind: "select", options: ["Graduate", "Not Graduate"], default: "Graduate" },
   { name: "self_employed", label: "Self-employed", kind: "select", options: ["No", "Yes"], default: "No" },
-  { name: "income_annum", label: "Annual income (₹)", kind: "number", min: 1, step: 1000, default: 6000000 },
-  { name: "loan_amount", label: "Requested loan amount (₹)", kind: "number", min: 1, step: 1000, default: 15000000 },
+  { name: "income_annum", label: "Annual income (₹)", kind: "number", min: 1, step: 1, default: 6000000 },
+  { name: "loan_amount", label: "Requested loan amount (₹)", kind: "number", min: 1, step: 1, default: 15000000 },
   { name: "loan_term", label: "Loan term (years)", kind: "number", min: 1, max: 30, step: 1, default: 10 },
   { name: "cibil_score", label: "CIBIL score", kind: "number", min: 300, max: 900, step: 1, default: 750 },
-  { name: "residential_assets_value", label: "Residential assets value (₹)", kind: "number", min: 0, step: 1000, default: 12000000 },
-  { name: "commercial_assets_value", label: "Commercial assets value (₹)", kind: "number", min: 0, step: 1000, default: 4000000 },
-  { name: "luxury_assets_value", label: "Luxury assets value (₹)", kind: "number", min: 0, step: 1000, default: 18000000 },
-  { name: "bank_asset_value", label: "Bank asset value (₹)", kind: "number", min: 0, step: 1000, default: 8000000 }
+  { name: "residential_assets_value", label: "Residential assets value (₹)", kind: "number", min: 0, step: 1, default: 12000000 },
+  { name: "commercial_assets_value", label: "Commercial assets value (₹)", kind: "number", min: 0, step: 1, default: 4000000 },
+  { name: "luxury_assets_value", label: "Luxury assets value (₹)", kind: "number", min: 0, step: 1, default: 18000000 },
+  { name: "bank_asset_value", label: "Bank asset value (₹)", kind: "number", min: 0, step: 1, default: 8000000 }
 ];
 let featureFields = FALLBACK_FIELDS.slice();
 
@@ -39,7 +39,7 @@ function renderFormFields(container) {
     const max = field.max !== undefined ? ' max="' + field.max + '"' : "";
     const step = field.step !== undefined ? ' step="' + field.step + '"' : ' step="any"';
     const value = field.default !== undefined ? ' value="' + escapeHtml(field.default) + '"' : "";
-    const hint = field.name === "cibil_score" ? "Use a value from 300 to 900." : "";
+    const hint = "";
     return '<label class="field" for="' + id + '"><span>' + escapeHtml(field.label) + '</span><input id="' + id + '" name="' + escapeHtml(field.name) + '" type="number" inputmode="decimal"' + min + max + step + value + ' required><small>' + escapeHtml(hint) + "</small></label>";
   }).join("");
 }
@@ -211,9 +211,9 @@ async function loadHealth() {
   const el = $("#api-status");
   try {
     const health = await apiFetch("/api/health");
-    const modelText = health.model_loaded ? "Model loaded" : "Model needs setup";
-    const geminiText = health.gemini_configured ? "Gemini configured" : "Gemini key missing";
-    el.textContent = modelText + " · " + geminiText;
+    const predictionText = health.model_loaded ? "Prediction service ready" : "Prediction setup needed";
+    const explanationText = health.gemini_configured ? "Explanations ready" : "AI explanations need setup";
+    el.textContent = predictionText + " · " + explanationText;
     if (!health.model_loaded || !health.gemini_configured) el.classList.add("error-text");
   } catch (_) {
     el.textContent = "API unavailable";

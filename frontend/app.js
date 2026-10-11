@@ -18,12 +18,12 @@ const FALLBACK_FIELDS = [
 let featureFields = FALLBACK_FIELDS.slice();
 
 function escapeHtml(value) {
-  return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
-    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char];
+  return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
   });
 }
 function niceFeature(value) {
-  return String(value || "").replaceAll("_", " ").replace(/\b\w/g, function (letter) { return letter.toUpperCase(); });
+  return String(value || "").replaceAll("_", " ").replace(/\b\w/g, function (ch) { return ch.toUpperCase(); });
 }
 function percent(value) {
   const number = Number(value);
@@ -31,21 +31,20 @@ function percent(value) {
 }
 function numberFmt(value, digits) {
   const number = Number(value);
-  return Number.isFinite(number) ? number.toLocaleString(undefined, { maximumFractionDigits: digits == null ? 3 : digits }) : "—";
+  return Number.isFinite(number) ? number.toLocaleString(undefined, { maximumFractionDigits: digits == null ? 2 : digits }) : "—";
 }
 function signed(value, digits) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
   return (number > 0 ? "+" : "") + number.toFixed(digits == null ? 3 : digits);
 }
-
 function renderFormFields(container) {
   container.innerHTML = featureFields.map(function (field) {
     const id = container.id + "-" + field.name;
     if (field.kind === "select") {
       const options = (field.options || []).map(function (option) {
-        const selected = String(option) === String(field.default) ? " selected" : "";
-        return '<option value="' + escapeHtml(option) + '"' + selected + ">" + escapeHtml(option) + "</option>";
+        const chosen = String(option) === String(field.default) ? " selected" : "";
+        return '<option value="' + escapeHtml(option) + '"' + chosen + ">" + escapeHtml(option) + "</option>";
       }).join("");
       return '<label class="field" for="' + id + '"><span>' + escapeHtml(field.label) + '</span><select id="' + id + '" name="' + escapeHtml(field.name) + '" required>' + options + "</select></label>";
     }
@@ -53,9 +52,7 @@ function renderFormFields(container) {
     const max = field.max !== undefined ? ' max="' + field.max + '"' : "";
     const step = field.step !== undefined ? ' step="' + field.step + '"' : ' step="any"';
     const value = field.default !== undefined ? ' value="' + escapeHtml(field.default) + '"' : "";
-    let hint = "";
-    if (field.name === "loan_amount") hint = "Requested principal, not total repayment.";
-    if (field.name === "cibil_score") hint = "Use a value from 300 to 900.";
+    const hint = field.name === "cibil_score" ? "Use a value from 300 to 900." : "";
     return '<label class="field" for="' + id + '"><span>' + escapeHtml(field.label) + '</span><input id="' + id + '" name="' + escapeHtml(field.name) + '" type="number" inputmode="decimal"' + min + max + step + value + ' required><small>' + escapeHtml(hint) + "</small></label>";
   }).join("");
 }
@@ -85,7 +82,7 @@ function collectForm(form) {
       data[field.name] = value;
     } else {
       const number = Number(value);
-      if (!Number.isFinite(number)) throw new Error(field.label + " must be a valid number.");
+      if (!Number.isFinite(number)) throw new Error(field.label + " must be numeric.");
       if (integerFields.has(field.name) && !Number.isInteger(number)) throw new Error(field.label + " must be a whole number.");
       if (field.min !== undefined && number < field.min) throw new Error(field.label + " must be at least " + field.min + ".");
       if (field.max !== undefined && number > field.max) throw new Error(field.label + " must be no more than " + field.max + ".");
@@ -94,7 +91,6 @@ function collectForm(form) {
   }
   return data;
 }
-
 async function apiFetch(path, options) {
   const settings = options || {};
   const response = await fetch(path, {
@@ -102,9 +98,9 @@ async function apiFetch(path, options) {
     headers: Object.assign({ "Content-Type": "application/json" }, settings.headers || {}),
     body: settings.body
   });
-  const data = await response.json().catch(function () { return {}; });
-  if (!response.ok) throw new Error(data.detail || ("Request failed (" + response.status + ")."));
-  return data;
+  const result = await response.json().catch(function () { return {}; });
+  if (!response.ok) throw new Error(result.detail || ("Request failed (" + response.status + ")."));
+  return result;
 }
 function showError(target, error) {
   target.innerHTML = '<div class="error"><strong>Could not complete the request.</strong><p>' + escapeHtml(error.message || error) + "</p></div>";
@@ -119,189 +115,136 @@ function setBusy(button, busy, label) {
     if (button.dataset.originalText) button.textContent = button.dataset.originalText;
   }
 }
-function renderList(items) {
-  if (!Array.isArray(items) || items.length === 0) return '<p class="muted">No factors were returned.</p>';
-  return '<ul class="result-list">' + items.map(function (item) { return "<li>" + escapeHtml(item) + "</li>"; }).join("") + "</ul>";
+function addFactorCards(factors, gemini) {
+  if (!Array.isArray(factors) || !factors.length) return '<p class="muted">No SHAP factors were available.</p>';
+  const explanations = new Map(((gemini && gemini.factor_explanations) || []).map(function (item) { return [item.feature, item.explanation]; }));
+  const maxAbs = Math.max(0.000001, ...factors.map(function (item) { return Math.abs(Number(item.shap_value) || 0); }));
+  return '<ul class="factors">' + factors.map(function (item) {
+    const val = Number(item.shap_value) || 0;
+    const positive = val >= 0;
+    const detail = explanations.get(item.feature) || item.explanation || "Contribution to the model's estimate.";
+    const width = Math.max(1, Math.min(100, Math.abs(val) / maxAbs * 100));
+    return '<li class="factor"><div class="factor-title"><span>' + escapeHtml(item.display_name || niceFeature(item.feature)) +
+      '</span><strong class="' + (positive ? "positive" : "negative") + '">' + signed(val, 4) + "</strong></div>" +
+      '<p class="muted">Applicant value: ' + escapeHtml(item.applicant_value) + " · " + escapeHtml(item.direction) + "</p>" +
+      '<div class="bar"><span class="' + (positive ? "" : "negative") + '" style="width:' + width + '%"></span></div>' +
+      "<p>" + escapeHtml(detail) + "</p></li>";
+  }).join("") + "</ul>";
 }
-function renderPrediction(data) {
-  const approved = Boolean(data.is_approved);
-  return '<article class="result-card">' +
-    '<p><span class="status ' + (approved ? "" : "rejected") + '">' + escapeHtml(data.predicted_status) + ' in this model</span></p>' +
-    '<p>' + escapeHtml(data.summary) + "</p>" +
-    '<div class="metrics"><div class="metric"><span>Estimated approval probability</span><strong>' + percent(data.approval_probability) + '</strong></div>' +
-    '<div class="metric"><span>Estimated rejection probability</span><strong>' + percent(data.rejection_probability) + '</strong></div></div>' +
-    '<p class="muted">Decision threshold: <strong>' + percent(data.decision_threshold) + '</strong> · Distance category: <strong>' + escapeHtml(data.confidence_level || "Not supplied") + '</strong></p>' +
-    '<p class="muted">Loan amount / annual income: ' + numberFmt(data.debt_to_income_ratio, 2) + '×</p>' +
-    '<div class="warning">' + escapeHtml(data.disclaimer) + "</div></article>";
-}
-function renderFactor(item, maxAbsContribution) {
-  const value = Number(item.shap_value) || 0;
-  const positive = value >= 0;
-  const scale = Math.max(0.000001, Number(maxAbsContribution) || 0);
-  const width = Math.max(1, Math.min(100, Math.abs(value) / scale * 100));
-  return '<li class="factor"><div class="factor-title"><span>' + escapeHtml(item.display_name || niceFeature(item.feature)) +
-    '</span><strong class="' + (positive ? "positive" : "negative") + '">' + signed(value, 4) + '</strong></div>' +
-    '<p class="muted">Applicant value: ' + escapeHtml(item.applicant_value) + ' · ' + escapeHtml(item.direction) + "</p>" +
-    '<div class="bar"><span class="' + (positive ? "" : "negative") + '" style="width:' + width + '%"></span></div>' +
-    '<p>' + escapeHtml(item.explanation || "Contribution to this model output.") + "</p></li>";
-}
-function renderExplanation(data) {
-  const factors = Array.isArray(data.feature_contributions) ? data.feature_contributions : [];
-  const maxAbsContribution = Math.max(0.000001, ...factors.map(function (item) { return Math.abs(Number(item.shap_value) || 0); }));
-  const first = factors.slice(0, 5).map(function (item) { return renderFactor(item, maxAbsContribution); }).join("");
-  const rest = factors.slice(5).map(function (item) { return renderFactor(item, maxAbsContribution); }).join("");
-  return '<article class="result-card"><p><span class="status ' + (data.is_approved ? "" : "rejected") + '">' +
-    escapeHtml(data.predicted_status) + ' in this model</span></p><p>Estimated approval probability: <strong>' + percent(data.approval_probability) +
-    '</strong> · Decision threshold: <strong>' + percent(data.decision_threshold) + "</strong></p>" +
-    '<h3>Top SHAP contributions</h3><p class="muted">Values are on the model output scale (log-odds), not percentage-point changes.</p><ul class="result-list">' + first + "</ul>" +
-    (rest ? '<details><summary>View all feature contributions</summary><ul class="result-list">' + rest + "</ul></details>" : "") +
-    '<h3>Factors supporting approval</h3>' + renderList(data.top_positive_factors) +
-    '<h3>Factors reducing approval</h3>' + renderList(data.top_negative_factors) +
-    '<h3>Main reasons</h3>' + renderList(data.reasons) +
-    '<h3>Suggestions</h3>' + ((data.suggestions || []).map(function (item) { return '<div class="suggestion">' + escapeHtml(item) + "</div>"; }).join("") || '<p class="muted">No suggestions returned.</p>') +
-    '<p class="warning">' + escapeHtml(data.model_dependence_note || "") + "</p>" +
-    '<p class="muted">' + escapeHtml(data.disclaimer || "") + "</p></article>";
-}
-function renderDependency(report) {
-  const experiment = report.feature_removal_experiment || {};
-  const full = experiment.model_a_all_features || {};
-  const reduced = experiment.model_b_without_dominant_feature || {};
-  const delta = experiment.performance_drop || {};
-  const rows = Array.isArray(report.global_importance) ? report.global_importance.slice(0, 8) : [];
-  const maxValue = Math.max(0.000001, ...rows.map(function (row) { return Math.abs(Number(row.mean_abs_shap) || 0); }));
-  const ranking = rows.length ? rows.map(function (row) {
-    const value = Number(row.mean_abs_shap) || 0;
-    return '<div class="importance-row"><span>' + escapeHtml(niceFeature(row.feature)) + '</span><div class="bar"><span style="width:' + Math.max(1, value / maxValue * 100) + '%"></span></div><strong>' + value.toFixed(3) + "</strong></div>";
-  }).join("") : '<p class="muted">Global ranking unavailable; see reports/feature_importance.csv.</p>';
-  const folds = Array.isArray(report.stability_across_folds) ? report.stability_across_folds : [];
-  const foldList = folds.length ? '<ul class="result-list">' + folds.map(function (row) {
-    return "<li>Fold " + escapeHtml(row.fold) + ": " + escapeHtml(niceFeature(row.top_feature)) + " ranked first by tree feature importance.</li>";
-  }).join("") + "</ul>" : '<p class="muted">Fold rankings are not available.</p>';
-  const correlations = Array.isArray(report.high_feature_correlations) ? report.high_feature_correlations : [];
-  const statusNote = report.report_status
-    ? '<div class="dependency-card wide"><p class="muted">' + escapeHtml(report.report_status) + "</p></div>"
+function renderResult(data, workflow) {
+  const prediction = data.prediction || {};
+  const gemini = data.gemini || {};
+  const recorded = data.recorded_decision;
+  const predicted = data.model_prediction || prediction.predicted_status || "Unknown";
+  const statusClass = function (value) { return value === "Approved" ? "" : value === "Rejected" ? "rejected" : "neutral"; };
+  let statusSection = '<p><span class="status ' + statusClass(predicted) + '">Model estimate: ' + escapeHtml(predicted) + "</span></p>";
+  if (workflow === "lookup") {
+    statusSection = '<div class="metrics"><div class="metric"><span>Status stored in dataset</span><strong><span class="status ' + statusClass(recorded) + '">' + escapeHtml(recorded || "Unknown") + '</span></strong></div>' +
+      '<div class="metric"><span>Gradient Boosting estimate</span><strong><span class="status ' + statusClass(predicted) + '">' + escapeHtml(predicted) + "</span></strong></div></div>";
+  }
+  const mismatch = workflow === "lookup" && data.decision_matches_record === false;
+  const mismatchNote = mismatch
+    ? '<div class="warning"><strong>The stored status and model estimate differ.</strong> SHAP explains the model estimate, not the reason the recorded application received its stored status.</div>'
     : "";
-  return statusNote + '<div class="dependency-card"><h3>Most influential global feature</h3><div class="large">' +
-    escapeHtml(niceFeature(report.most_influential_feature || "Not available")) + "</div><p class=\"muted\">Mean absolute SHAP: " +
-    numberFmt(report.mean_absolute_shap_contribution, 4) + "</p></div>" +
-    '<div class="dependency-card"><h3>Feature removal test</h3><p>Full model ROC-AUC: <strong>' + numberFmt(full.test_roc_auc, 3) +
-    '</strong></p><p>Without ' + escapeHtml(niceFeature(reduced.removed_feature || report.most_influential_feature)) +
-    ': <strong>' + numberFmt(reduced.test_roc_auc, 3) + "</strong></p><p>ROC-AUC change (reduced minus full): <strong>" +
-    signed(delta.roc_auc_delta, 3) + "</strong></p><p class=\"muted\">Accuracy change at the same decision threshold: " + signed(delta.accuracy_delta, 3) + "</p></div>" +
-    '<div class="dependency-card wide"><h3>Global feature ranking (SHAP)</h3>' + ranking + "</div>" +
-    '<div class="dependency-card"><h3>Fold-by-fold rankings</h3><p class="muted">These use tree impurity importance; they are not the same measure as SHAP importance.</p>' + foldList + "</div>" +
-    '<div class="dependency-card"><h3>Correlated numeric features</h3><div class="large">' + correlations.length + "</div><p class=\"muted\">Pairs whose absolute Pearson correlation exceeded 0.50 in the training data.</p>" +
-    (correlations.length ? '<ul class="result-list">' + correlations.slice(0, 6).map(function (row) { return "<li>" + escapeHtml(niceFeature(row.feature_1)) + " ↔ " + escapeHtml(niceFeature(row.feature_2)) + ": " + numberFmt(row.correlation, 2) + "</li>"; }).join("") + "</ul>" : "") +
-    "</div>";
+  const geminiLine = gemini.available
+    ? '<p class="gemini-note">Plain-language explanation generated by Gemini (' + escapeHtml(gemini.model || "configured model") + ").</p>"
+    : '<p class="gemini-note">' + escapeHtml(gemini.overview || "Gemini is unavailable. The computed SHAP evidence remains below.") + "</p>";
+  const overview = gemini.available ? '<p>' + escapeHtml(gemini.overview) + "</p>" : "";
+  const probability = prediction.approval_probability !== undefined ? prediction.approval_probability : data.model_explanation && data.model_explanation.approval_probability;
+  const rejectionProbability = prediction.rejection_probability !== undefined ? prediction.rejection_probability : (probability === undefined ? undefined : 1 - Number(probability));
+  const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+  const suggestionSection = suggestions.length
+    ? "<h3>Suggestions to consider</h3>" + suggestions.map(function (item) { return '<div class="suggestion">' + escapeHtml(item) + "</div>"; }).join("")
+    : "";
+  const sourceText = workflow === "lookup"
+    ? "These are factors that influenced the Gradient Boosting model's estimate for this row. The dataset does not contain official bank reasons."
+    : "These are factors that influenced this project's model estimate. They are not actual bank policy.";
+  return '<article class="result-card"><div class="result-header"><div><h3>' + (workflow === "lookup" ? "Application " + escapeHtml(data.application_id) : "Prediction result") +
+    "</h3><p class=\"muted\">" + escapeHtml(sourceText) + "</p></div></div>" +
+    statusSection + mismatchNote +
+    '<div class="metrics"><div class="metric"><span>Estimated approval probability</span><strong>' + percent(probability) + '</strong></div>' +
+    '<div class="metric"><span>Estimated rejection probability</span><strong>' + percent(rejectionProbability) + "</strong></div></div>" +
+    geminiLine + overview +
+    "<h3>Main factors affecting the model estimate</h3>" + addFactorCards(data.factors, gemini) +
+    suggestionSection +
+    '<p class="warning">' + escapeHtml(data.disclaimer || "This is an educational estimate based on synthetic data.") + "</p></article>";
 }
-function sameLayout(left, right) {
-  const signature = function (fields) {
-    return fields.map(function (field) {
-      return [field.name, field.label, field.kind, field.default, field.min, field.max, field.step, (field.options || []).join("|")].join("~");
-    });
-  };
-  return JSON.stringify(signature(left)) === JSON.stringify(signature(right));
+function showWorkflow(which) {
+  const isNew = which === "new";
+  $("#options").hidden = true;
+  $("#new-application-panel").hidden = !isNew;
+  $("#lookup-application-panel").hidden = isNew;
+  (isNew ? $("#new-application-panel") : $("#lookup-application-panel")).scrollIntoView({ behavior: "smooth", block: "start" });
 }
-
-function renderFallbackForms() {
-  renderFormFields($("#predict-fields"));
-  renderFormFields($("#explain-fields"));
+function returnToOptions(event) {
+  event.preventDefault();
+  $("#new-application-panel").hidden = true;
+  $("#lookup-application-panel").hidden = true;
+  $("#options").hidden = false;
+  $("#options").scrollIntoView({ behavior: "smooth", block: "start" });
 }
-function addTabHandlers() {
-  $$(".tab-button").forEach(function (button) {
-    button.addEventListener("click", function () {
-      $$(".tab-button").forEach(function (item) { item.classList.toggle("active", item === button); });
-      $$(".panel").forEach(function (panel) { panel.classList.toggle("active", panel.id === button.dataset.tab); });
-    });
-  });
-}
-function addFormHandler(formSelector, endpoint, resultSelector, buttonLabel, renderer) {
-  $(formSelector).addEventListener("submit", async function (event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const button = form.querySelector("button[type='submit']");
-    const target = $(resultSelector);
-    try {
-      const payload = collectForm(form);
-      setBusy(button, true, buttonLabel);
-      target.innerHTML = '<div class="result-card"><p>Working…</p></div>';
-      const response = await apiFetch(endpoint, { method: "POST", body: JSON.stringify(payload) });
-      target.innerHTML = renderer(response);
-    } catch (error) {
-      showError(target, error);
-    } finally {
-      setBusy(button, false);
-    }
-  });
-}
-
 async function loadSchema() {
   try {
     const response = await apiFetch("/api/schema");
     const incoming = response.features || [];
     if (!incoming.length) throw new Error("No feature schema was returned.");
-    if (!sameLayout(featureFields, incoming)) {
-      const predictValues = captureValues($("#predict-form"));
-      const explainValues = captureValues($("#explain-form"));
-      featureFields = incoming;
-      renderFallbackForms();
-      restoreValues($("#predict-form"), predictValues);
-      restoreValues($("#explain-form"), explainValues);
-    } else {
-      featureFields = incoming;
-    }
-    $("#predict-schema-note").textContent = "Fields loaded from the model metadata.";
-    $("#explain-schema-note").textContent = "Fields loaded from the model metadata.";
+    const values = captureValues($("#predict-form"));
+    featureFields = incoming;
+    renderFormFields($("#predict-fields"));
+    restoreValues($("#predict-form"), values);
   } catch (_) {
-    $("#predict-schema-note").textContent = "Using built-in fields; the model schema could not be reached.";
-    $("#explain-schema-note").textContent = "Using built-in fields; the model schema could not be reached.";
+    renderFormFields($("#predict-fields"));
   }
 }
 async function loadHealth() {
-  const statusText = $("#api-status");
-  const detail = $("#api-details");
+  const el = $("#api-status");
   try {
     const health = await apiFetch("/api/health");
-    if (health.model_loaded) {
-      statusText.textContent = "Model loaded";
-      statusText.title = "The trained model was loaded successfully.";
-      statusText.classList.remove("error-text");
-      detail.hidden = true;
-      detail.textContent = "";
-    } else {
-      statusText.textContent = "Model needs setup";
-      statusText.title = health.model_error || "The model artifact is missing or could not be loaded.";
-      statusText.classList.add("error-text");
-      detail.textContent = "The input forms are available, but prediction and SHAP requests need a working model. " +
-        (health.model_error ? "Model error: " + health.model_error + " " : "") +
-        "After activating .venv, run: python train_model.py";
-      detail.hidden = false;
-    }
+    const modelText = health.model_loaded ? "Model loaded" : "Model needs setup";
+    const geminiText = health.gemini_configured ? "Gemini configured" : "Gemini key missing";
+    el.textContent = modelText + " · " + geminiText;
+    if (!health.model_loaded || !health.gemini_configured) el.classList.add("error-text");
   } catch (_) {
-    statusText.textContent = "API unavailable";
-    statusText.title = "Start the FastAPI server to submit predictions.";
-    statusText.classList.add("error-text");
-    detail.textContent = "The API is unavailable. Start it in the project root with: .\\.venv\\Scripts\\python.exe -m uvicorn backend.main:app --reload";
-    detail.hidden = false;
+    el.textContent = "API unavailable";
+    el.classList.add("error-text");
   }
 }
-async function loadModelInfo() {
-  try {
-    const info = await apiFetch("/api/model-info");
-    $("#predict-schema-note").title = info.synthetic_disclaimer || "";
-  } catch (_) {}
-}
-async function loadDependency() {
-  try {
-    const report = await apiFetch("/api/dependency-analysis");
-    $("#dependency-result").innerHTML = renderDependency(report);
-  } catch (error) {
-    $("#dependency-result").innerHTML = '<div class="error">' + escapeHtml(error.message || error) + " If the report is missing, run the training script from the project root.</div>";
-  }
-}
+$("#new-application-button").addEventListener("click", function () { showWorkflow("new"); });
+$("#lookup-application-button").addEventListener("click", function () { showWorkflow("lookup"); });
+$$("[data-back]").forEach(function (link) { link.addEventListener("click", returnToOptions); });
 
-renderFallbackForms();
-addTabHandlers();
-addFormHandler("#predict-form", "/api/predict", "#predict-result", "Predicting", renderPrediction);
-addFormHandler("#explain-form", "/api/explain", "#explain-result", "Explaining", renderExplanation);
-Promise.all([loadSchema(), loadHealth(), loadModelInfo(), loadDependency()]);
+$("#predict-form").addEventListener("submit", async function (event) {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector("button[type='submit']");
+  const target = $("#predict-result");
+  try {
+    const payload = collectForm(event.currentTarget);
+    setBusy(button, true, "Predicting");
+    target.innerHTML = '<div class="result-card"><p>Making the estimate and preparing its explanation…</p></div>';
+    const result = await apiFetch("/api/predict-and-explain", { method: "POST", body: JSON.stringify(payload) });
+    target.innerHTML = renderResult(result, "predict");
+  } catch (error) {
+    showError(target, error);
+  } finally {
+    setBusy(button, false);
+  }
+});
+$("#lookup-form").addEventListener("submit", async function (event) {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector("button[type='submit']");
+  const target = $("#lookup-result");
+  const rawId = $("#application-id").value.trim();
+  try {
+    if (!rawId || !Number.isInteger(Number(rawId)) || Number(rawId) < 1) throw new Error("Enter a positive whole-number application ID.");
+    setBusy(button, true, "Searching");
+    target.innerHTML = '<div class="result-card"><p>Finding the application and preparing its explanation…</p></div>';
+    const result = await apiFetch("/api/application/" + encodeURIComponent(rawId));
+    target.innerHTML = renderResult(result, "lookup");
+  } catch (error) {
+    showError(target, error);
+  } finally {
+    setBusy(button, false);
+  }
+});
+renderFormFields($("#predict-fields"));
+Promise.all([loadSchema(), loadHealth()]);

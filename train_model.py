@@ -116,13 +116,25 @@ def run_pipeline():
         ('clf', GradientBoostingClassifier(random_state=42))
     ])
 
-    param_grid = {
-        'clf__n_estimators': [50, 100, 150],
-        'clf__learning_rate': [0.05, 0.1, 0.2],
-        'clf__max_depth': [3, 4, 5],
-        'clf__min_samples_leaf': [1, 2, 4],
-        'clf__subsample': [0.8, 1.0]
-    }
+    if os.getenv("LOAN_CI_FAST") == "1":
+        # CI still exercises the complete training/report path but avoids hundreds
+        # of GridSearchCV fits on every push. Normal local training keeps the full grid.
+        param_grid = {
+            'clf__n_estimators': [75],
+            'clf__learning_rate': [0.1],
+            'clf__max_depth': [3],
+            'clf__min_samples_leaf': [2],
+            'clf__subsample': [0.8]
+        }
+        print("LOAN_CI_FAST=1: using a small CI-only parameter grid.")
+    else:
+        param_grid = {
+            'clf__n_estimators': [50, 100, 150],
+            'clf__learning_rate': [0.05, 0.1, 0.2],
+            'clf__max_depth': [3, 4, 5],
+            'clf__min_samples_leaf': [1, 2, 4],
+            'clf__subsample': [0.8, 1.0]
+        }
 
     grid_search = GridSearchCV(
         gb_pipe,

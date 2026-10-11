@@ -11,15 +11,16 @@ Enter the financial and application features on the frontend. The backend:
 2. Computes individual SHAP contributions for that application.
 3. Selects the strongest contributions in the direction of the model estimate.
 4. Uses Gemini to explain those computed factors in plain English.
-5. Shows educational suggestions when the model estimate is Rejected.
+5. Sends the selected details and safe suggestions to Gemini for plain-language wording. The applicant-facing screen shows simple reasons and useful values, not raw SHAP numbers or technical contribution bars.
+6. Shows educational suggestions when the model estimate is Rejected.
 
 ### 2. Explain an existing application by ID
 
 Enter a `loan_id` from the checked-in CSV. The backend:
 1. Looks up the record in `synthetic_loan_dataset (1).csv` (or `data/loan_dataset.csv` as fallback).
 2. Displays the row's stored `loan_status` separately from the Gradient Boosting model's estimate.
-3. Uses SHAP to explain factors affecting the model's estimate, then asks Gemini to phrase that evidence clearly.
-4. Shows suggestions when the dataset row's stored status is Rejected.
+3. Uses internal feature-contribution analysis to select details related to the model's estimate, then asks Gemini to write simple reasons.
+4. Shows suggestions when the dataset row's stored status is Rejected. The screen does not expose numerical SHAP contributions.
 
 **Important:** the dataset stores an outcome label, not the bank's written reasons. SHAP explains the model's behaviour, not the actual internal reasoning of a bank. If the stored decision and model estimate differ, the UI explicitly flags the mismatch. The current checked-in data is synthetic; these IDs are for the demo only.
 
@@ -36,7 +37,7 @@ GEMINI_MODEL=gemini-3.5-flash-lite
 
 You can copy `.env.example` as a starting point. The key is read by the backend only; it is not sent to the browser. **Never commit `.env`, paste the key into Python/JavaScript, or share the key in GitHub.** The repository's `.gitignore` excludes `.env`. If a key was ever committed, revoke it and generate a replacement.
 
-If `GEMINI_API_KEY` is missing or the Gemini request fails, the app still displays locally computed SHAP evidence and the standard suggestions. The status line tells you that Gemini is not configured. You can change the model with `GEMINI_MODEL` without editing source code.
+If `GEMINI_API_KEY` is missing or the Gemini request fails, the app shows short, safe fallback explanations and the standard suggestions instead of raw SHAP values. The status line tells you that Gemini is not configured. You can change the model with `GEMINI_MODEL` without editing source code.
 
 ## Install and run on Windows
 
@@ -102,15 +103,15 @@ python -m pytest -q
 - `POST /api/predict-and-explain` — predict and explain a new application.
 - `GET /api/application/{application_id}` — find a stored row by `loan_id` and explain the model's view of it.
 - `POST /api/predict` — prediction-only API.
-- `POST /api/explain` — SHAP-only API.
+- `POST /api/explain` — applicant-friendly explanation in the same format as the main workflow.
 - `GET /api/dependency-analysis` — feature dependency report.
 - `GET /api/evaluation` — model metrics.
 
 ## Interpretation and safety
 
 - Prediction probabilities are model estimates, not guarantees or necessarily calibrated real-world probabilities.
-- SHAP is an explanation of the model output, not proof of causation and not a bank's written reason for a decision.
+- Feature-contribution analysis is used internally to choose the strongest details, but numerical SHAP values are not shown in the applicant-facing results. These details do not prove causation or reveal a bank's written reason.
 - The existing-ID workflow searches the local CSV. It does not connect to a real bank database.
-- Gemini is only allowed to rephrase supplied SHAP evidence and pre-computed suggestions. It does not choose the predicted class or compute feature contributions.
+- Gemini writes plain-language reasons from selected details and only rephrases pre-computed suggestions. It does not choose the predicted class or compute feature contributions.
 - Synthetic data and labels cannot establish real-world underwriting validity or fairness.
 - Do not commit API keys, private applicant data, or real customer records to Git.

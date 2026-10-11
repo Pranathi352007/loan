@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Educational loan prediction and existing application explanation using SHAP and Gemini.">
+  <meta name="description" content="A simple loan estimate with easy-to-understand explanations.">
   <title>Loan Explainable AI</title>
   <link rel="stylesheet" href="/static/styles.css">
   <script defer src="/static/app.js"></script>
@@ -12,7 +12,7 @@
   <header class="page-header">
     <div>
       <h1>Loan Explainable AI</h1>
-      <p>Understand a model's loan estimate or explore a stored application.</p>
+      <p>Get a loan estimate or understand an existing application's result.</p>
     </div>
     <p id="api-status" class="api-status">Checking service…</p>
   </header>
@@ -20,7 +20,7 @@
   <main>
     <div class="notice">
       <strong>Educational project only.</strong>
-      The included dataset is synthetic. It is not a real bank's data or policy. SHAP explains this model's behaviour, not the actual internal reasons behind a bank's decision.
+      This demo uses sample data, not real bank records or lending rules. Explanations describe this demo's estimate and are not a bank's official reasons.
     </div>
 
     <section id="options" class="options">
@@ -29,12 +29,12 @@
       <div class="option-grid">
         <button type="button" id="new-application-button" class="option-button">
           <span class="option-number">01</span>
-          <span><strong>Predict a Loan</strong><small>Enter financial details to get an estimate, key factors, and rejection suggestions.</small></span>
+          <span><strong>Predict a Loan</strong><small>Enter the application details to see an estimate, the three main factors, and helpful suggestions.</small></span>
           <span class="option-arrow" aria-hidden="true">→</span>
         </button>
         <button type="button" id="lookup-application-button" class="option-button">
           <span class="option-number">02</span>
-          <span><strong>Explain Existing Decision</strong><small>Search the dataset by application ID to see the stored status and model explanation.</small></span>
+          <span><strong>Explain Existing Decision</strong><small>Look up an application ID to see its saved status and a simple explanation.</small></span>
           <span class="option-arrow" aria-hidden="true">→</span>
         </button>
       </div>
@@ -43,7 +43,7 @@
     <section id="new-application-panel" class="workflow-panel" hidden>
       <a class="back-link" href="#options" data-back>← Back to options</a>
       <h2>Predict a loan application</h2>
-      <p class="section-copy">Enter the applicant's values. All fields are required by the current dataset's model.</p>
+      <p class="section-copy">Enter the application details below. Required fields are marked in the form.</p>
       <form id="predict-form" class="form-card">
         <div id="predict-fields" class="field-grid">
           <p class="muted">Preparing input fields…</p>
@@ -59,14 +59,14 @@
     <section id="lookup-application-panel" class="workflow-panel" hidden>
       <a class="back-link" href="#options" data-back>← Back to options</a>
       <h2>Explain an existing application</h2>
-      <p class="section-copy">Enter a loan ID from the checked-in dataset. This demo does not connect to a bank database.</p>
+      <p class="section-copy">Enter an application ID from this demo's sample records. It is not connected to a live bank database.</p>
       <form id="lookup-form" class="form-card lookup-form">
         <label class="field" for="application-id">
           <span>Application ID</span>
           <input id="application-id" name="application_id" type="number" min="1" step="1" placeholder="e.g. 1" required>
         </label>
         <div class="form-actions">
-          <p>The stored status and model estimate are shown separately.</p>
+          <p>The saved status and this demo's estimate are shown separately.</p>
           <button class="primary-button" type="submit">Find and explain</button>
         </div>
       </form>
@@ -74,8 +74,7 @@
     </section>
 
     <footer>
-      <span>Loan Explainable AI · Gradient Boosting + SHAP + Gemini</span>
-      <a href="/docs" target="_blank" rel="noreferrer">API documentation</a>
+      <span>Loan assistance · clear, simple explanations</span>
     </footer>
   </main>
 </body>

@@ -45,8 +45,8 @@ Use Python 3.11 (the serialized scikit-learn model and scientific dependencies m
 Open PowerShell in the project root:
 
 ```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+py -3.11 -m venv .venv311
+.\.venv311\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```

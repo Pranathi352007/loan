@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Simple educational loan prediction and SHAP explanation demo.">
+  <meta name="description" content="Educational loan prediction and existing application explanation using SHAP and Gemini.">
   <title>Loan Explainable AI</title>
   <link rel="stylesheet" href="/static/styles.css">
   <script defer src="/static/app.js"></script>
@@ -12,63 +12,69 @@
   <header class="page-header">
     <div>
       <h1>Loan Explainable AI</h1>
-      <p>Loan prediction, SHAP explanations, and feature-dependency checks.</p>
+      <p>Understand a model's loan estimate or explore a stored application.</p>
     </div>
-    <p id="api-status" class="api-status" title="Model status">Checking model…</p>
+    <p id="api-status" class="api-status">Checking service…</p>
   </header>
-  <p id="api-details" class="error status-error" role="status" hidden></p>
 
   <main>
     <div class="notice">
-      <strong>Educational demo only.</strong>
-      This project uses synthetic data. Results are not real bank decisions, financial advice, or proof of how a lender should assess an applicant.
+      <strong>Educational project only.</strong>
+      The included dataset is synthetic. It is not a real bank's data or policy. SHAP explains this model's behaviour, not the actual internal reasons behind a bank's decision.
     </div>
 
-    <nav class="tabs" aria-label="Project sections">
-      <button type="button" class="tab-button active" data-tab="predict-panel">Loan prediction</button>
-      <button type="button" class="tab-button" data-tab="explain-panel">Reasons &amp; suggestions</button>
-      <button type="button" class="tab-button" data-tab="dependency-panel">Feature dependency</button>
-    </nav>
+    <section id="options" class="options">
+      <h2>Choose an option</h2>
+      <p class="section-copy">Select one of the two ways to explore a loan application.</p>
+      <div class="option-grid">
+        <button type="button" id="new-application-button" class="option-button">
+          <span class="option-number">01</span>
+          <span><strong>Predict a Loan</strong><small>Enter financial details to get an estimate, key factors, and rejection suggestions.</small></span>
+          <span class="option-arrow" aria-hidden="true">→</span>
+        </button>
+        <button type="button" id="lookup-application-button" class="option-button">
+          <span class="option-number">02</span>
+          <span><strong>Explain Existing Decision</strong><small>Search the dataset by application ID to see the stored status and model explanation.</small></span>
+          <span class="option-arrow" aria-hidden="true">→</span>
+        </button>
+      </div>
+    </section>
 
-    <section id="predict-panel" class="panel active">
-      <h2>Loan prediction</h2>
-      <p class="section-copy">Enter the applicant values, then select Predict. The form is available even while the trained model is being repaired.</p>
+    <section id="new-application-panel" class="workflow-panel" hidden>
+      <a class="back-link" href="#options" data-back>← Back to options</a>
+      <h2>Predict a loan application</h2>
+      <p class="section-copy">Enter the applicant's values. All fields are required by the current dataset's model.</p>
       <form id="predict-form" class="form-card">
-        <div id="predict-fields" class="field-grid"></div>
+        <div id="predict-fields" class="field-grid">
+          <p class="muted">Preparing input fields…</p>
+        </div>
         <div class="form-actions">
           <p>Use fictional or anonymised values only.</p>
-          <button class="primary-button" type="submit">Predict</button>
+          <button class="primary-button" type="submit">Predict and explain</button>
         </div>
       </form>
-      <p id="predict-schema-note" class="muted schema-note" aria-live="polite">Input fields are ready.</p>
       <div id="predict-result" class="result-slot" aria-live="polite"></div>
     </section>
 
-    <section id="explain-panel" class="panel">
-      <h2>Reasons &amp; suggestions</h2>
-      <p class="section-copy">Enter a profile and select Explain to see the model’s strongest SHAP contributions and practical, conditional suggestions.</p>
-      <form id="explain-form" class="form-card">
-        <div id="explain-fields" class="field-grid"></div>
+    <section id="lookup-application-panel" class="workflow-panel" hidden>
+      <a class="back-link" href="#options" data-back>← Back to options</a>
+      <h2>Explain an existing application</h2>
+      <p class="section-copy">Enter a loan ID from the checked-in dataset. This demo does not connect to a bank database.</p>
+      <form id="lookup-form" class="form-card lookup-form">
+        <label class="field" for="application-id">
+          <span>Application ID</span>
+          <input id="application-id" name="application_id" type="number" min="1" step="1" placeholder="e.g. 1" required>
+        </label>
         <div class="form-actions">
-          <p>This explains the model, not a bank’s internal reasoning.</p>
-          <button class="primary-button" type="submit">Explain profile</button>
+          <p>The stored status and model estimate are shown separately.</p>
+          <button class="primary-button" type="submit">Find and explain</button>
         </div>
       </form>
-      <p id="explain-schema-note" class="muted schema-note" aria-live="polite">Input fields are ready.</p>
-      <div id="explain-result" class="result-slot" aria-live="polite"></div>
-    </section>
-
-    <section id="dependency-panel" class="panel">
-      <h2>Feature dependency</h2>
-      <p class="section-copy">Checks which features the trained model relies on and how performance changes when its most influential feature is removed.</p>
-      <div id="dependency-result" class="dependency-grid">
-        <p class="muted">Loading the saved analysis report…</p>
-      </div>
-      <p class="muted">Importance shows model behaviour, not causation. Because the data is synthetic, these results do not establish real-world lending policy or fairness.</p>
+      <div id="lookup-result" class="result-slot" aria-live="polite"></div>
     </section>
 
     <footer>
-      <span>Loan Explainable AI · Project demonstration</span>
+      <span>Loan Explainable AI · Gradient Boosting + SHAP + Gemini</span>
       <a href="/docs" target="_blank" rel="noreferrer">API documentation</a>
     </footer>
   </main>

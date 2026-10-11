@@ -3,15 +3,19 @@ from __future__ import annotations
 
 import csv
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+import pandas as pd
 
 from backend.explanation_service import ExplanationService
+from backend.gemini_service import GeminiExplanationService
 from backend.model_service import ModelService
+from backend.suggestion_service import SuggestionService
 from backend.schemas import (
     ExplanationResponse,
     LoanApplicationInput,
@@ -25,6 +29,7 @@ MODEL_METADATA_PATH = ROOT_DIR / "models" / "model_metadata.json"
 EVALUATION_PATH = ROOT_DIR / "reports" / "model_evaluation.json"
 DEPENDENCY_PATH = ROOT_DIR / "reports" / "dependency_analysis.json"
 FEATURE_IMPORTANCE_PATH = ROOT_DIR / "reports" / "feature_importance.csv"
+APPLICATION_DATA_PATHS = (ROOT_DIR / "synthetic_loan_dataset (1).csv", ROOT_DIR / "data" / "loan_dataset.csv")
 
 app = FastAPI(
     title="Loan Explainable AI",
@@ -184,6 +189,172 @@ def explain(application: LoanApplicationInput) -> ExplanationResponse:
             status_code=500,
             detail=f"SHAP explanation failed. Check the installed package versions and model artifact. Details: {exc}",
         ) from exc
+
+
+
+def _select_decision_factors(explanation: ExplanationResponse) -> list[dict[str, Any]]:
+    """Return up to three SHAP factors that push in the model's predicted direction."""
+    contributions = [item.model_dump() for item in explanation.feature_contributions]
+    if explanation.is_approved:
+        selected = [item for item in contributions if float(item.get("shap_value", 0)) > 0]
+    else:
+        selected = [item for item in contributions if float(item.get("shap_value", 0)) < 0]
+    selected.sort(key=lambda item: abs(float(item.get("shap_value", 0))), reverse=True)
+    if not selected:
+        selected = sorted(
+            contributions,
+            key=lambda item: abs(float(item.get("shap_value", 0))),
+            reverse=True,
+        )
+    return selected[:3]
+
+
+@lru_cache(maxsize=1)
+def _load_application_dataset() -> pd.DataFrame:
+    dataset_path = next((path for path in APPLICATION_DATA_PATHS if path.exists()), None)
+    if dataset_path is None:
+        raise HTTPException(
+            status_code=503,
+            detail="The application dataset was not found. Expected synthetic_loan_dataset (1).csv in the project root or data/loan_dataset.csv.",
+        )
+    try:
+        frame = pd.read_csv(dataset_path)
+    except (OSError, pd.errors.ParserError) as exc:
+        raise HTTPException(status_code=503, detail=f"Could not read the application dataset: {exc}") from exc
+
+    frame.columns = frame.columns.astype(str).str.strip()
+    required = {"loan_id", "loan_status"}
+    if not required.issubset(frame.columns):
+        raise HTTPException(
+            status_code=503,
+            detail="The application dataset must contain loan_id and loan_status columns.",
+        )
+    frame["loan_status"] = frame["loan_status"].astype(str).str.strip().str.title()
+    return frame
+
+
+def _run_explanation(
+    application: LoanApplicationInput,
+    *,
+    mode: str,
+    recorded_decision: str | None = None,
+) -> dict[str, Any]:
+    model_service = _require_model_service()
+    try:
+        prediction = model_service.predict(application)
+        explanation = ExplanationService.get_instance().explain(application)
+        factors = _select_decision_factors(explanation)
+
+        # The new-app workflow bases suggestions on the model estimate. The existing-record
+        # workflow bases whether suggestions are shown on the stored dataset status.
+        if mode == "application_lookup":
+            rejected_for_suggestions = recorded_decision == "Rejected"
+        else:
+            rejected_for_suggestions = prediction.predicted_status == "Rejected"
+
+        if rejected_for_suggestions:
+            suggestions = SuggestionService.generate_suggestions(
+                input_data=application,
+                is_approved=False,
+                top_negative_factors=[item["feature"] for item in factors if item.get("shap_value", 0) < 0],
+                top_positive_factors=[item["feature"] for item in factors if item.get("shap_value", 0) > 0],
+            )
+        else:
+            suggestions = []
+
+        decision_matches_record = (
+            prediction.predicted_status == recorded_decision
+            if recorded_decision is not None
+            else None
+        )
+        gemini = GeminiExplanationService.explain(
+            mode="prediction" if mode == "prediction" else "application_lookup",
+            model_prediction=prediction.predicted_status,
+            approval_probability=prediction.approval_probability,
+            decision_threshold=prediction.decision_threshold,
+            factors=factors,
+            safe_suggestions=suggestions,
+            recorded_decision=recorded_decision,
+            decision_matches_record=decision_matches_record,
+        )
+        return {
+            "mode": mode,
+            "prediction": prediction.model_dump(),
+            "model_explanation": explanation.model_dump(),
+            "recorded_decision": recorded_decision,
+            "decision_matches_record": decision_matches_record,
+            "model_prediction": prediction.predicted_status,
+            "factors": factors,
+            "gemini": gemini,
+            "suggestions": gemini.get("suggestions", suggestions) if rejected_for_suggestions else [],
+            "disclaimer": (
+                "This project uses synthetic data. SHAP explains this Gradient Boosting model's estimate, "
+                "not a real bank's internal reasoning. A dataset's stored decision is an outcome label, not an explanation."
+            ),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not generate the explanation. Check the model and SHAP packages. Details: {type(exc).__name__}: {exc}",
+        ) from exc
+
+
+@app.post("/api/predict-and-explain")
+def predict_and_explain(application: LoanApplicationInput) -> dict[str, Any]:
+    """Predict a new application and explain the factors behind the model estimate."""
+    return _run_explanation(application, mode="prediction")
+
+
+@app.get("/api/application/{application_id}")
+def explain_existing_application(application_id: int) -> dict[str, Any]:
+    """Look up a stored application ID, then explain the model's view of that row."""
+    if application_id < 1:
+        raise HTTPException(status_code=400, detail="Application ID must be a positive integer.")
+
+    frame = _load_application_dataset()
+    if pd.api.types.is_numeric_dtype(frame["loan_id"]):
+        matches = frame[pd.to_numeric(frame["loan_id"], errors="coerce") == application_id]
+    else:
+        matches = frame[frame["loan_id"].astype(str).str.strip() == str(application_id)]
+
+    if matches.empty:
+        raise HTTPException(status_code=404, detail=f"Application ID {application_id} was not found in the checked-in dataset.")
+
+    metadata = _require_metadata()
+    row = matches.iloc[0]
+    stored_status = str(row["loan_status"]).strip().title()
+    if stored_status not in {"Approved", "Rejected"}:
+        raise HTTPException(status_code=503, detail=f"Unsupported stored loan_status value: {stored_status!r}.")
+
+    feature_names = metadata["feature_schema"]["features"]
+    missing_features = [name for name in feature_names if name not in frame.columns]
+    if missing_features:
+        raise HTTPException(
+            status_code=503,
+            detail=f"The dataset is missing model feature columns: {', '.join(missing_features)}",
+        )
+
+    values: dict[str, Any] = {}
+    for name in feature_names:
+        value = row[name]
+        values[name] = value.item() if hasattr(value, "item") else value
+    try:
+        application = LoanApplicationInput.model_validate(values)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Application ID {application_id} contains values that do not match the model input schema: {exc}",
+        ) from exc
+
+    result = _run_explanation(
+        application,
+        mode="application_lookup",
+        recorded_decision=stored_status,
+    )
+    result["application_id"] = application_id
+    return result
 
 
 @app.get("/api/model-info", response_model=ModelInfoResponse)

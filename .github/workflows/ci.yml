@@ -25,6 +25,8 @@ jobs:
       - name: Compile Python files
         run: python -m compileall -q backend train_model.py
       - name: Rebuild model artifacts with the pinned environment
+        env:
+          LOAN_CI_FAST: "1"
         run: python train_model.py
       - name: Run API tests
         run: pytest -q

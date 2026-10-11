@@ -129,12 +129,19 @@ function renderReasonCards(factors, gemini) {
       '</h4><p>' + escapeHtml(reason) + '</p></article>';
   }).join("") + '</div>';
 }
-function renderSuggestionCards(suggestions) {
+function renderSuggestionCards(suggestions, factors) {
   if (!Array.isArray(suggestions) || !suggestions.length) return "";
+  const names = new Map((Array.isArray(factors) ? factors : []).map(function (factor) {
+    return [factor.feature, factor.display_name || niceFeature(factor.feature)];
+  }));
   return '<section class="suggestions-block"><h3>Suggestions to consider</h3><ul class="suggestion-list">' +
     suggestions.slice(0, 3).map(function (item) {
       const text = typeof item === "string" ? item : (item && item.suggestion) || "";
-      return text ? '<li class="suggestion">' + escapeHtml(text) + '</li>' : "";
+      const feature = item && typeof item === "object" ? item.feature : "";
+      const name = names.get(feature) || (feature ? niceFeature(feature) : "");
+      return text ? '<li class="suggestion">' +
+        (name ? '<strong>' + escapeHtml(name) + '</strong>' : '') +
+        '<p>' + escapeHtml(text) + '</p></li>' : "";
     }).join("") + '</ul></section>';
 }
 function renderResult(data, workflow) {
@@ -165,7 +172,7 @@ function renderResult(data, workflow) {
   const overview = gemini.overview
     ? '<section class="result-overview"><h3>Summary</h3><p>' + escapeHtml(gemini.overview) + '</p></section>'
     : "";
-  const suggestions = renderSuggestionCards(data.suggestions);
+  const suggestions = renderSuggestionCards(data.suggestions, factors);
   const disclaimer = data.disclaimer ||
     "This demo uses sample data. The estimate is not a loan offer or a guarantee of approval.";
   return '<article class="result-card"><div class="result-header"><div><h3>' +

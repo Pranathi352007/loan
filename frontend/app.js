@@ -106,7 +106,7 @@ function renderFactorCards(factors) {
   if (!Array.isArray(factors) || !factors.length) {
     return '<p class="muted">No key details were available for this result.</p>';
   }
-  return '<div class="factor-grid">' + factors.map(function (item) {
+  return '<div class="factor-grid">' + factors.slice(0, 3).map(function (item) {
     const name = item.display_name || niceFeature(item.feature);
     return '<article class="factor-card"><h4>' + escapeHtml(name) +
       '</h4><span class="value-label">Your value</span><p class="factor-value">' +
@@ -121,10 +121,10 @@ function renderReasonCards(factors, gemini) {
   const explanations = new Map(((gemini && gemini.factor_explanations) || []).map(function (item) {
     return [item.feature, item.explanation];
   }));
-  return '<div class="reason-list">' + factors.map(function (item) {
+  return '<div class="reason-list">' + factors.slice(0, 3).map(function (item) {
     const name = item.display_name || niceFeature(item.feature);
     const reason = item.reason || explanations.get(item.feature) ||
-      "This detail was considered as part of the demo's estimate.";
+      "This detail was considered as part of the result.";
     return '<article class="reason-card"><h4>' + escapeHtml(name) +
       '</h4><p>' + escapeHtml(reason) + '</p></article>';
   }).join("") + '</div>';
@@ -132,7 +132,7 @@ function renderReasonCards(factors, gemini) {
 function renderSuggestionCards(suggestions) {
   if (!Array.isArray(suggestions) || !suggestions.length) return "";
   return '<section class="suggestions-block"><h3>Suggestions to consider</h3><ul class="suggestion-list">' +
-    suggestions.map(function (item) {
+    suggestions.slice(0, 3).map(function (item) {
       const text = typeof item === "string" ? item : (item && item.suggestion) || "";
       return text ? '<li class="suggestion">' + escapeHtml(text) + '</li>' : "";
     }).join("") + '</ul></section>';
@@ -140,7 +140,7 @@ function renderSuggestionCards(suggestions) {
 function renderResult(data, workflow) {
   const prediction = data.prediction || {};
   const gemini = data.gemini || {};
-  const factors = Array.isArray(data.factors) ? data.factors : [];
+  const factors = (Array.isArray(data.factors) ? data.factors : []).slice(0, 3);
   const recorded = data.recorded_decision;
   const predicted = data.model_prediction || prediction.predicted_status || "Unknown";
   const statusClass = function (value) {
@@ -148,11 +148,11 @@ function renderResult(data, workflow) {
   };
 
   let statusSection = '<div class="decision-grid single-decision"><div class="decision-item">' +
-    '<span>Estimated result</span><strong><span class="status ' + statusClass(predicted) + '">' +
+    '<span>Estimated outcome</span><strong><span class="status ' + statusClass(predicted) + '">' +
     escapeHtml(predicted) + '</span></strong></div></div>';
   if (workflow === "lookup") {
     statusSection = '<div class="decision-grid">' +
-      '<div class="decision-item"><span>Outcome stored in dataset</span><strong><span class="status ' +
+      '<div class="decision-item"><span>Saved outcome</span><strong><span class="status ' +
       statusClass(recorded) + '">' + escapeHtml(recorded || "Unknown") + '</span></strong></div>' +
       '<div class="decision-item"><span>Demo estimate</span><strong><span class="status ' +
       statusClass(predicted) + '">' + escapeHtml(predicted) + '</span></strong></div></div>';
@@ -160,23 +160,20 @@ function renderResult(data, workflow) {
 
   const mismatch = workflow === "lookup" && data.decision_matches_record === false;
   const mismatchNote = mismatch
-    ? '<div class="warning"><strong>The saved outcome and demo estimate are different.</strong> The explanation below describes the demo estimate only. The dataset does not contain the lender’s actual reasons.</div>'
+    ? '<div class="warning"><strong>The saved outcome and demo estimate are different.</strong> The reasons below explain this demo estimate only. The sample record does not include the lender’s actual reasons.</div>'
     : "";
   const overview = gemini.overview
     ? '<section class="result-overview"><h3>Summary</h3><p>' + escapeHtml(gemini.overview) + '</p></section>'
     : "";
   const suggestions = renderSuggestionCards(data.suggestions);
-  const sourceText = workflow === "lookup"
-    ? "This record comes from the demo dataset. The explanation describes the demo estimate, not an actual lender's private reasons."
-    : "This estimate comes from a model trained on synthetic data; it is not a real lender's decision.";
   const disclaimer = data.disclaimer ||
-    "This is an educational demo using synthetic data. It cannot guarantee loan approval.";
+    "This demo uses sample data. The estimate is not a loan offer or a guarantee of approval.";
   return '<article class="result-card"><div class="result-header"><div><h3>' +
-    (workflow === "lookup" ? "Application " + escapeHtml(data.application_id) : "Prediction result") +
-    '</h3><p class="muted">' + escapeHtml(sourceText) + '</p></div></div>' +
+    (workflow === "lookup" ? "Application " + escapeHtml(data.application_id) : "Your result") +
+    '</h3></div></div>' +
     statusSection + mismatchNote + overview +
-    '<h3>Key details</h3>' + renderFactorCards(factors) +
-    '<h3>Why this result?</h3>' + renderReasonCards(factors, gemini) +
+    '<h3>Top 3 factors affecting this result</h3>' + renderFactorCards(factors) +
+    '<h3>Why these factors matter</h3>' + renderReasonCards(factors, gemini) +
     suggestions +
     '<p class="warning">' + escapeHtml(disclaimer) + '</p></article>';
 }

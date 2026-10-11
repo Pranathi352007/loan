@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -113,6 +114,8 @@ def health() -> dict[str, Any]:
         "model_artifact_present": artifact_present,
         "metadata_present": metadata_present,
         "dataset_present": dataset_present,
+        "gemini_configured": bool(os.getenv("GEMINI_API_KEY", "").strip()),
+        "gemini_model": os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
         "note": "A loaded model is not evidence of external validity. This project uses synthetic data.",
     }
 

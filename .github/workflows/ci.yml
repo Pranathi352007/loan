@@ -24,5 +24,7 @@ jobs:
           python -m pip install -r requirements.txt
       - name: Compile Python files
         run: python -m compileall -q backend train_model.py
+      - name: Rebuild model artifacts with the pinned environment
+        run: python train_model.py
       - name: Run API tests
         run: pytest -q

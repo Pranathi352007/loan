@@ -46,6 +46,8 @@ def test_frontend_assets_are_served():
     assert js_response.status_code == 200
     assert '/api/predict-and-explain' in js_response.text
     assert '/api/application/' in js_response.text
+    assert "shap_value" not in js_response.text
+    assert "approval_probability" not in js_response.text
 
 
 def test_homepage_has_two_workflow_buttons():
@@ -91,15 +93,20 @@ def _skip_if_serialized_model_cannot_load():
         pytest.skip("Bundled model artifact cannot load in this dependency environment; run train_model.py.")
 
 
-def test_new_application_prediction_and_shap_flow():
+def test_new_application_prediction_and_plain_language_flow():
     _skip_if_serialized_model_cannot_load()
     response = client.post("/api/predict-and-explain", json=SAMPLE_APPLICATION)
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["prediction"]["predicted_status"] in {"Approved", "Rejected"}
-    assert 0 <= payload["prediction"]["approval_probability"] <= 1
+    assert "approval_probability" not in payload["prediction"]
+    assert "model_explanation" not in payload
     assert payload["factors"]
     assert "overview" in payload["gemini"]
+    for factor in payload["factors"]:
+        assert {"feature", "display_name", "applicant_value", "reason"} <= set(factor)
+        assert "shap_value" not in factor
+    assert "shap_value" not in str(payload).lower()
 
 
 def test_application_id_lookup_explains_existing_row():

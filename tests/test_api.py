@@ -114,7 +114,13 @@ def test_new_application_prediction_and_plain_language_flow():
     assert "model_explanation" not in payload
     assert payload["factors"]
     assert len(payload["factors"]) <= 3
-    assert "overview" in payload["gemini"]
+    assert payload["gemini"].get("overview", "") == ""
+    assert len(payload["gemini"]["factor_explanations"]) == len(payload["factors"])
+    if payload["prediction"]["predicted_status"] == "Rejected":
+        assert len(payload["suggestions"]) == len(payload["factors"])
+        assert all({"feature", "suggestion"} <= set(item) for item in payload["suggestions"])
+    else:
+        assert payload["suggestions"] == []
     for factor in payload["factors"]:
         assert {"feature", "display_name", "applicant_value", "reason"} <= set(factor)
         assert "shap_value" not in factor
@@ -131,6 +137,12 @@ def test_application_id_lookup_explains_existing_row():
     assert payload["model_prediction"] in {"Approved", "Rejected"}
     assert isinstance(payload["decision_matches_record"], bool)
     assert len(payload["factors"]) <= 3
+    assert payload["gemini"].get("overview", "") == ""
+    assert len(payload["gemini"]["factor_explanations"]) == len(payload["factors"])
+    if payload["model_prediction"] == "Rejected":
+        assert len(payload["suggestions"]) == len(payload["factors"])
+    else:
+        assert payload["suggestions"] == []
     assert "model_explanation" not in payload
     assert "shap_value" not in str(payload).lower()
     for factor in payload["factors"]:

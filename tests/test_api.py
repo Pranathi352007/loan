@@ -36,6 +36,9 @@ def test_schema_contains_expected_fields():
     assert "loan_amount" in names
     assert "income_annum" in names
     assert "cibil_score" in names
+    fields = {field["name"]: field for field in response.json()["features"]}
+    assert fields["income_annum"]["step"] == 1
+    assert fields["loan_amount"]["step"] == 1
 
 
 def test_frontend_assets_are_served():
@@ -46,6 +49,14 @@ def test_frontend_assets_are_served():
     assert js_response.status_code == 200
     assert '/api/predict-and-explain' in js_response.text
     assert '/api/application/' in js_response.text
+    html_response = client.get("/")
+    assert "SHAP" not in html_response.text
+    assert "Gradient Boosting" not in html_response.text
+    assert "Gemini" not in html_response.text
+    assert "SHAP" not in js_response.text
+    assert "Gradient Boosting" not in js_response.text
+    assert "Gemini" not in js_response.text
+    assert "step: 1000" not in js_response.text
     assert "shap_value" not in js_response.text
     assert "approval_probability" not in js_response.text
 
@@ -102,6 +113,7 @@ def test_new_application_prediction_and_plain_language_flow():
     assert "approval_probability" not in payload["prediction"]
     assert "model_explanation" not in payload
     assert payload["factors"]
+    assert len(payload["factors"]) <= 3
     assert "overview" in payload["gemini"]
     for factor in payload["factors"]:
         assert {"feature", "display_name", "applicant_value", "reason"} <= set(factor)
@@ -118,6 +130,7 @@ def test_application_id_lookup_explains_existing_row():
     assert payload["recorded_decision"] in {"Approved", "Rejected"}
     assert payload["model_prediction"] in {"Approved", "Rejected"}
     assert isinstance(payload["decision_matches_record"], bool)
+    assert len(payload["factors"]) <= 3
     assert "model_explanation" not in payload
     assert "shap_value" not in str(payload).lower()
     for factor in payload["factors"]:

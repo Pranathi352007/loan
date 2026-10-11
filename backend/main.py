@@ -145,14 +145,14 @@ def feature_schema() -> dict[str, Any]:
         "no_of_dependents": {"min": 0, "max": 10, "step": 1, "default": 2},
         "education": {"default": "Graduate"},
         "self_employed": {"default": "No"},
-        "income_annum": {"min": 1, "step": 1000, "default": 6000000},
-        "loan_amount": {"min": 1, "step": 1000, "default": 15000000},
+        "income_annum": {"min": 1, "step": 1, "default": 6000000},
+        "loan_amount": {"min": 1, "step": 1, "default": 15000000},
         "loan_term": {"min": 1, "max": 30, "step": 1, "default": 10},
         "cibil_score": {"min": 300, "max": 900, "step": 1, "default": 750},
-        "residential_assets_value": {"min": 0, "step": 1000, "default": 12000000},
-        "commercial_assets_value": {"min": 0, "step": 1000, "default": 4000000},
-        "luxury_assets_value": {"min": 0, "step": 1000, "default": 18000000},
-        "bank_asset_value": {"min": 0, "step": 1000, "default": 8000000},
+        "residential_assets_value": {"min": 0, "step": 1, "default": 12000000},
+        "commercial_assets_value": {"min": 0, "step": 1, "default": 4000000},
+        "luxury_assets_value": {"min": 0, "step": 1, "default": 18000000},
+        "bank_asset_value": {"min": 0, "step": 1, "default": 8000000},
     }
 
     fields = []

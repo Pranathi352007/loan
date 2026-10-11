@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import app
@@ -66,6 +67,50 @@ def test_prediction_explanation_route_is_registered():
     paths = response.json()["paths"]
     assert "/api/predict-and-explain" in paths
     assert "/api/application/{application_id}" in paths
+
+
+
+SAMPLE_APPLICATION = {
+    "no_of_dependents": 2,
+    "education": "Graduate",
+    "self_employed": "No",
+    "income_annum": 6000000,
+    "loan_amount": 15000000,
+    "loan_term": 10,
+    "cibil_score": 750,
+    "residential_assets_value": 12000000,
+    "commercial_assets_value": 4000000,
+    "luxury_assets_value": 18000000,
+    "bank_asset_value": 8000000,
+}
+
+
+def _skip_if_serialized_model_cannot_load():
+    health = client.get("/api/health").json()
+    if not health.get("model_loaded"):
+        pytest.skip("Bundled model artifact cannot load in this dependency environment; run train_model.py.")
+
+
+def test_new_application_prediction_and_shap_flow():
+    _skip_if_serialized_model_cannot_load()
+    response = client.post("/api/predict-and-explain", json=SAMPLE_APPLICATION)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["prediction"]["predicted_status"] in {"Approved", "Rejected"}
+    assert 0 <= payload["prediction"]["approval_probability"] <= 1
+    assert payload["factors"]
+    assert "overview" in payload["gemini"]
+
+
+def test_application_id_lookup_explains_existing_row():
+    _skip_if_serialized_model_cannot_load()
+    response = client.get("/api/application/1")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["application_id"] == 1
+    assert payload["recorded_decision"] in {"Approved", "Rejected"}
+    assert payload["model_prediction"] in {"Approved", "Rejected"}
+    assert isinstance(payload["decision_matches_record"], bool)
 
 
 def test_unknown_path_is_not_accidentally_served():

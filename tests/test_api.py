@@ -43,7 +43,8 @@ def test_frontend_assets_are_served():
     assert css_response.status_code == 200
     assert ".field input" in css_response.text
     assert js_response.status_code == 200
-    assert 'addFormHandler("#predict-form"' in js_response.text
+    assert '/api/predict-and-explain' in js_response.text
+    assert '/api/application/' in js_response.text
 
 
 def test_homepage_has_two_workflow_buttons():
